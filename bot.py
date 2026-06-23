@@ -52,12 +52,14 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
-from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy import (
     TurnAnalyzerUserTurnStopStrategy,
 )
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
+
+import agent
+from prompts import build_system_prompt
 
 logger.info("✅ All components loaded successfully!")
 
@@ -74,16 +76,17 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         voice_id="SAz9YHcvj6GT2YYXdXww",
     )
 
-    llm = OpenAILLMService(api_key=os.environ["OPENAI_API_KEY"])
+    llm = agent.build_llm()
+    agent.register_tools(llm)
 
     messages = [
         {
             "role": "system",
-            "content": "You are a friendly AI assistant. Respond naturally and keep your answers conversational.",
+            "content": build_system_prompt(),
         },
     ]
 
-    context = LLMContext(messages)
+    context = LLMContext(messages, tools=agent.get_tools_schema())
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
@@ -124,7 +127,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         messages.append(
             {
                 "role": "system",
-                "content": "Say hello and briefly introduce yourself as a digital assistant from the Prosper Health clinic.",
+                "content": (
+                    "Greet the caller, introduce yourself as the Prosper Health scheduling "
+                    "assistant, and ask for their full name, date of birth and phone number "
+                    "so you can find them in the system."
+                ),
             }
         )
         await task.queue_frames([LLMRunFrame()])
