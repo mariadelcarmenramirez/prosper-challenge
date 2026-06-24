@@ -22,14 +22,13 @@ async def create_patient(body: CreatePatientRequest) -> PatientResponse:
         try:
             row = await conn.fetchrow(
                 """
-                INSERT INTO patients (full_name, date_of_birth, phone, email)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id, full_name, date_of_birth, phone, email
+                INSERT INTO patients (full_name, date_of_birth, phone)
+                VALUES ($1, $2, $3)
+                RETURNING id, full_name, date_of_birth, phone
                 """,
                 body.full_name,
                 body.date_of_birth,
                 body.phone,
-                body.email,
             )
         except asyncpg.UniqueViolationError:
             raise HTTPException(
@@ -52,7 +51,7 @@ async def find_patient(
     async with acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id, full_name, date_of_birth, phone, email
+            SELECT id, full_name, date_of_birth, phone
             FROM patients
             WHERE full_name = $1 AND date_of_birth = $2 AND phone = $3
             """,

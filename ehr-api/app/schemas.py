@@ -18,7 +18,6 @@ class CreatePatientRequest(BaseModel):
     full_name: str
     date_of_birth: date
     phone: str
-    email: str | None = None
 
 
 class PatientResponse(BaseModel):
@@ -28,7 +27,6 @@ class PatientResponse(BaseModel):
     full_name: str
     date_of_birth: date
     phone: str
-    email: str | None = None
 
 
 # --- Appointments -----------------------------------------------------------

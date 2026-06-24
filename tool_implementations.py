@@ -58,7 +58,7 @@ async def find_patient(full_name: str, date_of_birth: str, phone: str):
     return resp.json()
 
 
-async def create_patient(full_name: str, date_of_birth: str, phone: str, email: str | None = None):
+async def create_patient(full_name: str, date_of_birth: str, phone: str):
     """Register a new patient; the EHR generates the patient_id."""
     return await _request(
         "POST",
@@ -67,7 +67,6 @@ async def create_patient(full_name: str, date_of_birth: str, phone: str, email: 
             "full_name": full_name,
             "date_of_birth": date_of_birth,
             "phone": phone,
-            "email": email,
         },
     )
 

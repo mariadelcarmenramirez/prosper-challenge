@@ -37,7 +37,6 @@ create_patient = FunctionSchema(
         "full_name": {"type": "string", "description": "Caller's full name."},
         "date_of_birth": {"type": "string", "description": _DATE},
         "phone": {"type": "string", "description": "Caller's phone number."},
-        "email": {"type": "string", "description": "Optional email address."},
     },
     required=["full_name", "date_of_birth", "phone"],
 )

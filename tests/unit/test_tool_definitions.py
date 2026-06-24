@@ -1,7 +1,7 @@
 """Unit tests for the tool definitions and the handler registry."""
 
 from agent import TOOL_HANDLERS
-from tools import TOOL_SCHEMAS
+from tool_schemas import TOOL_SCHEMAS
 
 REQUIRED_BY_README = {
     "create_patient",

@@ -1,4 +1,4 @@
-"""Integration tests for ehr_tools against a live EHR API.
+"""Integration tests for tool_implementations against a live EHR API.
 
 Skips automatically if the API is not reachable, so the unit suite stays green
 without infrastructure. Run the stack first:
@@ -13,7 +13,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-import ehr_tools
+import tool_implementations
 
 BASE = os.environ.get("EHR_BASE_URL", "http://localhost:8000")
 
@@ -33,14 +33,14 @@ async def require_api():
 
 
 async def test_find_unknown_patient_returns_none():
-    result = await ehr_tools.find_patient("No Such Person", "1970-01-01", "+34000000000")
+    result = await tool_implementations.find_patient("No Such Person", "1970-01-01", "+34000000000")
     assert result is None
 
 
 async def test_create_then_find_returns_same_id():
     name = f"Test {uuid.uuid4().hex[:8]}"
-    created = await ehr_tools.create_patient(name, "1991-03-03", "+34622222222")
+    created = await tool_implementations.create_patient(name, "1991-03-03", "+34622222222")
     assert "id" in created
-    found = await ehr_tools.find_patient(name, "1991-03-03", "+34622222222")
+    found = await tool_implementations.find_patient(name, "1991-03-03", "+34622222222")
     assert found is not None
     assert found["id"] == created["id"]

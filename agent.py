@@ -13,18 +13,18 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
 
-import ehr_tools
-from tools import TOOL_SCHEMAS
+import tool_implementations
+from tool_schemas import TOOL_SCHEMAS
 
-# Tool name -> the coroutine that implements it. Names must match tools.py.
+# Tool name -> the coroutine that implements it. Names must match tool_schemas.py.
 TOOL_HANDLERS: dict[str, Callable[..., Awaitable[Any]]] = {
-    "find_patient": ehr_tools.find_patient,
-    "create_patient": ehr_tools.create_patient,
-    "list_availability_slots": ehr_tools.list_availability_slots,
-    "list_patient_appointments": ehr_tools.list_patient_appointments,
-    "create_appointment": ehr_tools.create_appointment,
-    "confirm_appointment": ehr_tools.confirm_appointment,
-    "cancel_appointment": ehr_tools.cancel_appointment,
+    "find_patient": tool_implementations.find_patient,
+    "create_patient": tool_implementations.create_patient,
+    "list_availability_slots": tool_implementations.list_availability_slots,
+    "list_patient_appointments": tool_implementations.list_patient_appointments,
+    "create_appointment": tool_implementations.create_appointment,
+    "confirm_appointment": tool_implementations.confirm_appointment,
+    "cancel_appointment": tool_implementations.cancel_appointment,
 }
 
 

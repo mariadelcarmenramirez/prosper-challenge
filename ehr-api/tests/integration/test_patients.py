@@ -4,7 +4,6 @@ PATIENT = {
     "full_name": "Jane Doe",
     "date_of_birth": "1990-01-01",
     "phone": "+34600000000",
-    "email": "jane@example.com",
 }
 
 
