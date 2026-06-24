@@ -59,6 +59,7 @@ from pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy import (
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 import agent
+import supervisor_agent
 import task_specialist_agent
 from prompts import build_system_prompt
 
@@ -66,7 +67,7 @@ logger.info("✅ All components loaded successfully!")
 
 load_dotenv(override=True)
 
-TASK_SPECIALIST = os.environ.get("TASK_SPECIALIST", "").strip().lower() in {"1", "true", "yes", "on"}
+AGENT_ARCH = os.environ.get("AGENT_ARCH", "single")
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
@@ -79,10 +80,14 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         voice_id="SAz9YHcvj6GT2YYXdXww",
     )
 
-
-# SELECT ARCHITECTURE
-
-    if TASK_SPECIALIST:
+    if AGENT_ARCH == "supervisor":
+        logger.info("Agent architecture: supervisor + worker sub-agents")
+        supervisor = supervisor_agent.Supervisor()
+        llm = supervisor_agent.build_llm()
+        supervisor.register_tools(llm)
+        system_prompt = supervisor.get_initial_system_prompt()
+        tools = supervisor.get_initial_tools_schema()
+    elif AGENT_ARCH == "specialist":
         logger.info("Agent architecture: phased specialist (sequential handoff)")
         llm = task_specialist_agent.build_llm()
         task_specialist_agent.register_tools(llm)
