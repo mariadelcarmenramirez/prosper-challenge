@@ -8,6 +8,24 @@ import tool_implementations
 BASE = tool_implementations.EHR_BASE_URL
 
 
+async def test_confirm_patient_data_returns_validation_result():
+    payload = {
+        "valid": True,
+        "full_name": "Jane Doe",
+        "date_of_birth": "1990-01-01",
+        "phone": "+34600000000",
+        "issues": [],
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/patients/validate").mock(return_value=httpx.Response(200, json=payload))
+        result = await tool_implementations.confirm_patient_data(
+            "  Jane Doe ", "1990-01-01", "+34 600 000 000"
+        )
+    assert result["valid"] is True
+    assert result["phone"] == "+34600000000"
+    assert result["issues"] == []
+
+
 async def test_find_patient_returns_none_on_404():
     with respx.mock(base_url=BASE) as mock:
         mock.get("/patients/find").mock(return_value=httpx.Response(404, json={"detail": "x"}))

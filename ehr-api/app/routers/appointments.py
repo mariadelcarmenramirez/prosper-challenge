@@ -31,7 +31,7 @@ router = APIRouter(tags=["appointments"])
 TZ = ZoneInfo("Europe/Madrid")          # clinic wall-clock timezone
 CLINIC_OPEN_HOUR = 9                     # first bookable start
 CLINIC_LAST_START = 17                   # last bookable start (17:00-18:00)
-APPOINTMENT_HOURS = 1
+APPOINTMENT_HOURS = 1                    # appointments last 1hour
 HOLD_TTL_MINUTES = 5                     # how long a proposed slot stays reserved
 
 

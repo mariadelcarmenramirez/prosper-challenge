@@ -13,11 +13,31 @@ _DATETIME = (
     "(e.g. 2026-07-06T15:00:00 for 3pm). Always on the hour."
 )
 
+confirm_patient_data = FunctionSchema(
+    name="confirm_patient_data",
+    description=(
+        "Validate and normalize the caller's identity BEFORE any lookup. Call "
+        "this the moment you have their full name, date of birth and phone, and "
+        "BEFORE find_patient. It returns 'valid' plus cleaned-up values: if "
+        "'valid' is false, re-ask the caller for the field named in 'issues' and "
+        "call again; if true, read the normalized name, date of birth and phone "
+        "back to confirm, then pass THOSE values to find_patient/create_patient. "
+        "This stops you from booking under the wrong record or saving a duplicate."
+    ),
+    properties={
+        "full_name": {"type": "string", "description": "Caller's full name as heard."},
+        "date_of_birth": {"type": "string", "description": _DATE},
+        "phone": {"type": "string", "description": "Caller's phone number as heard."},
+    },
+    required=["full_name", "date_of_birth", "phone"],
+)
+
 find_patient = FunctionSchema(
     name="find_patient",
     description=(
-        "Look up an existing patient by their full identity. Call this first, "
-        "after collecting the caller's full name, date of birth and phone number."
+        "Look up an existing patient by their full identity. Call this only after "
+        "confirm_patient_data returns valid and the caller confirms, using the "
+        "normalized name, date of birth and phone it returned."
     ),
     properties={
         "full_name": {"type": "string", "description": "Caller's full name."},
@@ -108,6 +128,7 @@ cancel_appointment = FunctionSchema(
 )
 
 TOOL_SCHEMAS: list[FunctionSchema] = [
+    confirm_patient_data,
     find_patient,
     create_patient,
     list_availability_slots,

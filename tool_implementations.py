@@ -40,6 +40,19 @@ def _detail(resp: httpx.Response) -> str:
 # --- Patients ---------------------------------------------------------------
 
 
+async def confirm_patient_data(full_name: str, date_of_birth: str, phone: str):
+    """Validate and normalize the caller's identity before any lookup.
+
+    Returns ``{"valid": bool, "full_name", "date_of_birth", "phone", "issues":
+    [...]}``. Always call this before ``find_patient`` and, when ``valid`` is
+    true, pass the normalized fields it returns on to find/create_patient."""
+    return await _request(
+        "POST",
+        "/patients/validate",
+        json={"full_name": full_name, "date_of_birth": date_of_birth, "phone": phone},
+    )
+
+
 async def find_patient(full_name: str, date_of_birth: str, phone: str):
     """Look up a patient by full identity. Returns the patient dict, or ``None``
     if they are not registered yet."""

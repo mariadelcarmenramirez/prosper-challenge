@@ -21,7 +21,7 @@ def test_prompt_contains_clinic_name():
 
 def test_prompt_describes_all_flows():
     prompt = build_system_prompt().lower()
-    for keyword in ["register", "book", "cancel", "find_patient", "confirm"]:
+    for keyword in ["register", "book", "cancel", "confirm_patient_data", "find_patient", "confirm"]:
         assert keyword in prompt
 
 

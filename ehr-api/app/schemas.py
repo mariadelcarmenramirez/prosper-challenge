@@ -29,6 +29,28 @@ class PatientResponse(BaseModel):
     phone: str
 
 
+class ConfirmPatientDataRequest(BaseModel):
+    """Raw, caller-provided identity to validate *before* find/create. Taken as
+    plain strings (not ``date``) so a malformed value yields a friendly issue
+    instead of FastAPI rejecting the whole request with a 422."""
+
+    full_name: str
+    date_of_birth: str
+    phone: str
+
+
+class ConfirmPatientDataResponse(BaseModel):
+    """Result of the pre-lookup identity check. When ``valid`` is true the
+    normalized fields are the canonical values to pass on to find/create_patient;
+    when false, ``issues`` lists, in plain language, what to re-ask the caller."""
+
+    valid: bool
+    full_name: str | None = None
+    date_of_birth: str | None = None
+    phone: str | None = None
+    issues: list[str] = []
+
+
 # --- Appointments -----------------------------------------------------------
 
 
