@@ -59,11 +59,14 @@ from pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy import (
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 import agent
+import task_specialist_agent
 from prompts import build_system_prompt
 
 logger.info("✅ All components loaded successfully!")
 
 load_dotenv(override=True)
+
+TASK_SPECIALIST = os.environ.get("TASK_SPECIALIST", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
@@ -76,17 +79,30 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         voice_id="SAz9YHcvj6GT2YYXdXww",
     )
 
-    llm = agent.build_llm()
-    agent.register_tools(llm)
+
+# SELECT ARCHITECTURE
+
+    if TASK_SPECIALIST:
+        logger.info("Agent architecture: phased specialist (sequential handoff)")
+        llm = task_specialist_agent.build_llm()
+        task_specialist_agent.register_tools(llm)
+        system_prompt = task_specialist_agent.get_initial_system_prompt()
+        tools = task_specialist_agent.get_initial_tools_schema()
+    else:
+        logger.info("Agent architecture: single context")
+        llm = agent.build_llm()
+        agent.register_tools(llm)
+        system_prompt = build_system_prompt()
+        tools = agent.get_tools_schema()
 
     messages = [
         {
             "role": "system",
-            "content": build_system_prompt(),
+            "content": system_prompt,
         },
     ]
 
-    context = LLMContext(messages, tools=agent.get_tools_schema())
+    context = LLMContext(messages, tools=tools)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
