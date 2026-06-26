@@ -7,7 +7,9 @@ offered tool subset. Loop-safety itself is reused from ``guard.py`` and already
 covered by ``test_call_guard.py``.
 """
 
+from datetime import datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from pipecat.processors.aggregators.llm_context import LLMContext
 
@@ -146,3 +148,91 @@ def test_set_system_prompt_replaces_only_the_first_system_message():
 
     assert context.messages[0]["content"] == "NEW BOOKER PROMPT"
     assert context.messages[1]["content"] == "Greet the caller and ask for their details."
+
+
+# --- Deterministic patient_id capture ---------------------------------------
+
+
+async def test_capturing_coro_records_patient_id_from_a_successful_result():
+    state = tsa.CallState()
+
+    async def fake_find(**kwargs):
+        return {"id": "real-42", "full_name": "Jane"}
+
+    wrapped = tsa._make_capturing_coro("find_patient", fake_find, state)
+    result = await wrapped(full_name="Jane")
+
+    assert result == {"id": "real-42", "full_name": "Jane"}  # passes the result through unchanged
+    assert state.patient_id == "real-42"
+
+
+async def test_capturing_coro_ignores_a_result_without_an_id():
+    state = tsa.CallState()
+
+    async def fake_find(**kwargs):
+        return {"found": False}
+
+    await tsa._make_capturing_coro("find_patient", fake_find, state)()
+
+    assert state.patient_id is None
+
+
+async def test_transfer_prefers_the_captured_id_over_the_model_argument():
+    """A hallucinated patient_id in the tool call must never override the real one."""
+    state = tsa.CallState(patient_id="real-42")
+    context = _fresh_identify_context()
+    handler = tsa._make_transfer_handler(tsa.BOOK, state)
+
+    await handler(_params({"patient_id": "hallucinated-99"}, context, {}))
+
+    content = context.messages[0]["content"]
+    assert "real-42" in content
+    assert "hallucinated-99" not in content
+
+
+async def test_transfer_falls_back_to_the_model_argument_when_nothing_captured():
+    state = tsa.CallState()  # no id captured yet
+    context = _fresh_identify_context()
+    handler = tsa._make_transfer_handler(tsa.BOOK, state)
+
+    await handler(_params({"patient_id": "pat-7"}, context, {}))
+
+    assert "pat-7" in context.messages[0]["content"]
+
+
+async def test_register_tools_wires_capture_so_a_transfer_reuses_the_real_id(monkeypatch):
+    """End-to-end: the registered find_patient handler feeds the transfer handler."""
+
+    async def fake_find(**kwargs):
+        return {"id": "db-77", "full_name": "Jane Doe"}
+
+    monkeypatch.setitem(tsa.TOOL_HANDLERS, "find_patient", fake_find)
+
+    llm = _FakeLLM()
+    tsa.register_tools(llm)
+
+    # Drive the genuine registered find_patient handler so the id is captured.
+    await llm.registered["find_patient"](_params({"full_name": "Jane Doe"}, _fresh_identify_context(), {}))
+
+    # A transfer carrying a wrong model-supplied id must still use the captured one.
+    context = _fresh_identify_context()
+    await llm.registered["transfer_to_booking"](_params({"patient_id": "wrong"}, context, {}))
+
+    content = context.messages[0]["content"]
+    assert "db-77" in content
+    assert "wrong" not in content
+
+
+# --- The call's "today" anchor survives a phase swap ------------------------
+
+
+async def test_phase_swap_preserves_the_call_now_anchor():
+    """The booker prompt must keep the identifier's 'today', not reset to wall-clock."""
+    fixed = datetime(2026, 7, 1, 10, 0, tzinfo=ZoneInfo("Europe/Madrid"))  # a Wednesday
+    state = tsa.CallState(now=fixed, patient_id="pat-1")
+    context = _fresh_identify_context()
+    handler = tsa._make_transfer_handler(tsa.BOOK, state)
+
+    await handler(_params({}, context, {}))
+
+    assert "2026-07-01" in context.messages[0]["content"]

@@ -6,9 +6,9 @@ Three CSVs come out of a run:
 * ``by_scenario_*.csv`` — pass/fail per (arch, model, scenario), to see *where* an
   architecture or model breaks.
 * ``summary_*.csv`` — the headline table: per (arch, model), the accuracy
-  (oracle success rate), latency distribution (mean/p50/p90/p95 per agent turn),
-  LLM-call count, token usage, and the **average cost per conversation in USD** plus
-  the run's total spend — the accuracy-vs-latency-vs-cost picture in one place.
+  (oracle success rate), the mean agent-turn latency, LLM-call count, token usage,
+  and the **average cost per conversation in USD** plus the run's total spend — the
+  accuracy-vs-latency-vs-cost picture in one place.
 """
 
 from __future__ import annotations
@@ -19,16 +19,6 @@ from datetime import datetime
 from pathlib import Path
 
 from .trace import ConversationTrace
-
-
-def _percentile(values: list[float], pct: float) -> float:
-    if not values:
-        return 0.0
-    s = sorted(values)
-    k = (len(s) - 1) * pct
-    lo = int(k)
-    hi = min(lo + 1, len(s) - 1)
-    return round(s[lo] + (s[hi] - s[lo]) * (k - lo), 4)
 
 
 def _mean(values: list[float]) -> float:
@@ -50,7 +40,6 @@ def _run_rows(traces: list[ConversationTrace]) -> list[dict]:
                 "error": tr.error or "",
                 "agent_turns": len(lat),
                 "mean_turn_latency_s": _mean(lat),
-                "p90_turn_latency_s": _percentile(lat, 0.90),
                 "agent_llm_calls": led.get("agent_calls", 0),
                 "prompt_tokens": led.get("agent_prompt_tokens", 0),
                 "completion_tokens": led.get("agent_completion_tokens", 0),
@@ -62,7 +51,7 @@ def _run_rows(traces: list[ConversationTrace]) -> list[dict]:
 
 
 def _summary_rows(run_rows: list[dict], traces: list[ConversationTrace]) -> list[dict]:
-    # Gather per-(arch, model) for averages, and all turn latencies for percentiles.
+    # Gather per-(arch, model) for averages, and all turn latencies for the mean.
     by_cell_runs: dict[tuple, list[dict]] = defaultdict(list)
     by_cell_lat: dict[tuple, list[float]] = defaultdict(list)
     for row in run_rows:
@@ -83,9 +72,6 @@ def _summary_rows(run_rows: list[dict], traces: list[ConversationTrace]) -> list
                 "conversations": n,
                 "success_rate": round(sum(r["passed"] for r in rows) / n, 4) if n else 0.0,
                 "mean_turn_latency_s": _mean(lats),
-                "p50_turn_latency_s": _percentile(lats, 0.50),
-                "p90_turn_latency_s": _percentile(lats, 0.90),
-                "p95_turn_latency_s": _percentile(lats, 0.95),
                 "avg_agent_llm_calls": _mean([float(r["agent_llm_calls"]) for r in rows]),
                 "avg_prompt_tokens": round(_mean([float(r["prompt_tokens"]) for r in rows])),
                 "avg_completion_tokens": round(_mean([float(r["completion_tokens"]) for r in rows])),

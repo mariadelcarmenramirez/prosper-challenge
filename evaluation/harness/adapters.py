@@ -53,7 +53,7 @@ def _build_single(model: str, now: datetime | None) -> AgentSetup:
 
 def _build_specialist(model: str, now: datetime | None) -> AgentSetup:
     llm = FakeLLM()
-    guard = specialist.register_tools(llm)
+    guard = specialist.register_tools(llm, now=now)
     context = FakeLLMContext(
         messages=[{"role": "system", "content": specialist.get_initial_system_prompt(now=now)}],
         tools=specialist.get_initial_tools_schema(),

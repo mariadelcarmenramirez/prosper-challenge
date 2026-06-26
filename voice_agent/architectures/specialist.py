@@ -13,7 +13,9 @@ A ``transfer_to_*`` tool is what advances the conversation: when the model calls
 it, the handler swaps the context's system prompt and offered tool subset, so the
 next inference runs as the new specialist. There is still one ``OpenAILLMService``
 and one shared message history, so the patient_id discovered while identifying is
-carried forward for free; we also inject it into the next prompt for robustness.
+carried forward for free; for robustness we also capture it deterministically from
+the EHR result into a per-call ``CallState`` and inject that into the next prompt,
+rather than trusting the model to copy the id into its transfer arguments.
 
 Phases and their tools:
 * IDENTIFY  — confirm_patient_data, find_patient, create_patient, and the two
@@ -74,9 +76,10 @@ from ..tools.schemas import (
 
 # --- Transfer (handoff) tool schemas ---------------------------------------
 #
-# The only tools that move the conversation between phases. They take the
-# confirmed patient_id so the identifier cannot hand off before it actually has
-# one, and so we can surface the id in the next specialist's prompt.
+# The only tools that move the conversation between phases. They still require the
+# patient_id as a gate (the identifier cannot hand off before it believes it has
+# one) and as a fallback, but the value actually carried forward is the one
+# captured deterministically from the EHR result, not whatever the model passes.
 
 transfer_to_booking = FunctionSchema(
     name="transfer_to_booking",
@@ -252,6 +255,44 @@ TRANSFERS: dict[str, Phase] = {
 }
 
 
+# --- Per-call state ---------------------------------------------------------
+
+
+@dataclass
+class CallState:
+    """Facts captured once per call and reused when a phase swaps.
+
+    ``now`` is the call's "today" anchor: the identifier prompt is built with it,
+    so the booker / canceller prompt must reuse the SAME value (rather than
+    silently falling back to wall-clock) or relative dates like "this Wednesday"
+    would resolve against a different day after the handoff.
+
+    ``patient_id`` is folded in deterministically from the real find_patient /
+    create_patient result (see ``_make_capturing_coro``), so the transfer no
+    longer has to trust the model to copy the id into its tool arguments.
+    """
+
+    now: datetime | None = None
+    patient_id: str | None = None
+
+
+def _make_capturing_coro(name: str, coro, state: CallState):
+    """Wrap an EHR coroutine so a successful identify result records the patient_id.
+
+    Wrapping the *coroutine* (not the Pipecat handler) keeps all loop-safety in
+    the shared ``make_handler`` untouched; we only observe the result and fold the
+    id into ``state`` before returning it unchanged.
+    """
+
+    async def wrapped(**kwargs):
+        result = await coro(**kwargs)
+        if isinstance(result, dict) and result.get("id"):
+            state.patient_id = result["id"]
+        return result
+
+    return wrapped
+
+
 # --- Phase swapping ---------------------------------------------------------
 
 
@@ -274,23 +315,34 @@ def _set_system_prompt(context, content: str) -> None:
     context.set_messages(new_messages)
 
 
-def _apply_phase(context, phase: Phase, patient_id: str | None = None) -> None:
+def _apply_phase(
+    context, phase: Phase, patient_id: str | None = None, now: datetime | None = None
+) -> None:
     """Make ``phase`` the active specialist: swap its prompt and its tool subset.
 
     The OpenAI LLM service reads ``context.tools`` and the system prompt fresh on
     every inference, so swapping them inside a tool handler takes effect on the
-    very next turn.
+    very next turn. ``now`` is threaded through so the new phase keeps the call's
+    original "today" anchor instead of resetting to wall-clock.
     """
-    _set_system_prompt(context, phase.build_prompt(patient_id=patient_id))
+    _set_system_prompt(context, phase.build_prompt(now=now, patient_id=patient_id))
     context.set_tools(ToolsSchema(standard_tools=list(phase.tools)))
 
 
-def _make_transfer_handler(phase: Phase):
-    """Handler for a ``transfer_to_*`` tool: advance to ``phase`` and report back."""
+def _make_transfer_handler(phase: Phase, state: CallState | None = None):
+    """Handler for a ``transfer_to_*`` tool: advance to ``phase`` and report back.
+
+    The patient_id is taken from ``state`` — captured deterministically from the
+    real find_patient / create_patient result — and only falls back to the
+    model-supplied argument if nothing was captured. ``state.now`` is reused so the
+    next phase keeps the same "today" the identifier used.
+    """
 
     async def handler(params: FunctionCallParams) -> None:
-        patient_id = params.arguments.get("patient_id")
-        _apply_phase(params.context, phase, patient_id=patient_id)
+        captured = state.patient_id if state else None
+        patient_id = captured or params.arguments.get("patient_id")
+        now = state.now if state else None
+        _apply_phase(params.context, phase, patient_id=patient_id, now=now)
         await params.result_callback({"status": "transferred", "phase": phase.name})
 
     return handler
@@ -299,7 +351,9 @@ def _make_transfer_handler(phase: Phase):
 # --- Public surface (mirrors agent.py so bot.py can swap modules) -----------
 
 
-def register_tools(llm: OpenAILLMService, guard: CallGuard | None = None) -> CallGuard:
+def register_tools(
+    llm: OpenAILLMService, guard: CallGuard | None = None, now: datetime | None = None
+) -> CallGuard:
     """Register every handler on the LLM service: EHR tools + transfer tools.
 
     All handlers are registered up front; which ones the model may actually call
@@ -308,12 +362,22 @@ def register_tools(llm: OpenAILLMService, guard: CallGuard | None = None) -> Cal
     handlers) provides the same loop-safety as the single agent; transfer handlers
     are unguarded because the conversation can only pass through them a bounded
     number of times.
+
+    A per-call ``CallState`` is shared between the identify handlers and the
+    transfer handlers: the identify handlers fold the real patient_id into it, the
+    transfer handlers read it back (so the handoff id never depends on the model)
+    and reuse ``now`` as the call's "today". Pass the same ``now`` used to build the
+    initial system prompt so a phase swap keeps that date anchor.
     """
     guard = guard or CallGuard()
+    state = CallState(now=now)
     for name, coro in TOOL_HANDLERS.items():
+        # Only the identify tools yield a patient_id worth capturing.
+        if name in ("find_patient", "create_patient"):
+            coro = _make_capturing_coro(name, coro, state)
         llm.register_function(name, make_handler(name, coro, guard))
     for name, phase in TRANSFERS.items():
-        llm.register_function(name, _make_transfer_handler(phase))
+        llm.register_function(name, _make_transfer_handler(phase, state))
     return guard
 
 

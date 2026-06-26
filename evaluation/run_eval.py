@@ -159,10 +159,10 @@ async def main_async(args) -> None:
 
 def _print_summary(summary: list[dict]) -> None:
     print("\n=== SUMMARY (success rate / mean latency / avg cost) ===")
-    print(f"{'arch':11} {'model':13} {'succ':>6} {'mean_s':>8} {'p90_s':>8} {'calls':>6} {'$/call':>9}")
+    print(f"{'arch':11} {'model':13} {'succ':>6} {'mean_s':>8} {'calls':>6} {'$/call':>9}")
     for row in summary:
         print(f"{row['arch']:11} {row['model']:13} {row['success_rate']*100:5.0f}% "
-              f"{row['mean_turn_latency_s']:8.2f} {row['p90_turn_latency_s']:8.2f} "
+              f"{row['mean_turn_latency_s']:8.2f} "
               f"{row['avg_agent_llm_calls']:6.1f} {row['avg_cost_per_call_usd']:9.5f}")
 
 

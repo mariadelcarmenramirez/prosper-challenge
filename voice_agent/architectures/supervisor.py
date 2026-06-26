@@ -171,8 +171,8 @@ You are given the caller's patient_id and any slot currently held for them.
   new times were given, hold the next match and report the new offer; otherwise report that you need
   other times.
 - If nothing is available: report that and that the supervisor should ask for other times.
-Pass appointment times as YYYY-MM-DDTHH:MM:SS. Never read ids aloud in the human-facing part, but do
-put 'held_id: <id>' on its own final line when a slot is held.
+Pass appointment times as YYYY-MM-DDTHH:MM:SS. Never read ids aloud; the supervisor tracks the held
+slot for you, so you do not need to mention any id in your report.
 """
 
 
