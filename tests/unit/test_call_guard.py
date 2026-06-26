@@ -1,14 +1,14 @@
-"""Unit tests for the per-call loop-safety guard in agent.py.
+"""Unit tests for the per-call loop-safety guard in guard.py.
 
 Two layers are exercised: the ``CallGuard`` state machine directly, and the
-handler wiring (``_make_handler``) that attaches the stop signal to a tool
+handler wiring (``runtime.make_handler``) that attaches the stop signal to a tool
 result and ends the call programmatically when the global ceiling is hit.
 """
 
 from types import SimpleNamespace
 
-import agent
-from agent import (
+import voice_agent.core.runtime as runtime
+from voice_agent.core.guard import (
     MAX_EMPTY_AVAILABILITY_ROUNDS,
     MAX_REJECTED_OFFERS,
     MAX_TOTAL_TOOL_CALLS,
@@ -119,7 +119,7 @@ async def test_handler_attaches_stop_signal_to_streak_result(monkeypatch):
 
     guard = CallGuard()
     guard.empty_availability_rounds = MAX_EMPTY_AVAILABILITY_ROUNDS - 1
-    handler = agent._make_handler("list_availability_slots", fake_slots, guard)
+    handler = runtime.make_handler("list_availability_slots", fake_slots, guard)
 
     calls: dict = {}
     await handler(_fake_params("list_availability_slots", {"date": "2026-07-06"}, calls))
@@ -137,7 +137,7 @@ async def test_handler_ends_call_at_global_ceiling():
 
     guard = CallGuard()
     guard.total_calls = MAX_TOTAL_TOOL_CALLS - 1
-    handler = agent._make_handler("find_patient", fake_tool, guard)
+    handler = runtime.make_handler("find_patient", fake_tool, guard)
 
     calls: dict = {}
     await handler(_fake_params("find_patient", {}, calls))
@@ -153,7 +153,7 @@ async def test_handler_normalizes_missing_patient_to_found_false():
         return None
 
     guard = CallGuard()
-    handler = agent._make_handler("find_patient", fake_find, guard)
+    handler = runtime.make_handler("find_patient", fake_find, guard)
 
     calls: dict = {}
     await handler(_fake_params("find_patient", {}, calls))

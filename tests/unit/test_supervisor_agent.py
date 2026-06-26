@@ -1,10 +1,10 @@
 """Unit tests for the supervisor-workers agent.
 
-These cover the parts unique to ``supervisor_agent.py``: the supervisor's
+These cover the parts unique to ``architectures/supervisor.py``: the supervisor's
 delegation tool surface, each worker's EHR tool subset, the FunctionSchema ->
 OpenAI tool conversion, the shared-state observation, and the worker tool-calling
 loop driven by a fake OpenAI client (no network). Loop-safety itself is reused
-from ``agent.py`` and covered by ``test_call_guard.py``.
+from ``guard.py`` and covered by ``test_call_guard.py``.
 """
 
 import json
@@ -12,8 +12,8 @@ from types import SimpleNamespace
 
 from pipecat.frames.frames import EndTaskFrame
 
-import supervisor_agent as sup
-from agent import MAX_TOTAL_TOOL_CALLS, CallGuard
+import voice_agent.architectures.supervisor as sup
+from voice_agent.core.guard import MAX_TOTAL_TOOL_CALLS, CallGuard
 
 IDENTIFIER_TOOLS = {"confirm_patient_data", "find_patient", "create_patient"}
 BOOKER_TOOLS = {

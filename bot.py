@@ -58,10 +58,8 @@ from pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy import (
 )
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
-import agent
-import supervisor_agent
-import task_specialist_agent
-from prompts import build_system_prompt
+from voice_agent.architectures import single, specialist, supervisor
+from voice_agent.core.prompts import build_system_prompt
 
 logger.info("✅ All components loaded successfully!")
 
@@ -82,23 +80,23 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     if AGENT_ARCH == "supervisor":
         logger.info("Agent architecture: supervisor + worker sub-agents")
-        supervisor = supervisor_agent.Supervisor()
-        llm = supervisor_agent.build_llm()
-        supervisor.register_tools(llm)
-        system_prompt = supervisor.get_initial_system_prompt()
-        tools = supervisor.get_initial_tools_schema()
+        orchestrator = supervisor.Supervisor()
+        llm = supervisor.build_llm()
+        orchestrator.register_tools(llm)
+        system_prompt = orchestrator.get_initial_system_prompt()
+        tools = orchestrator.get_initial_tools_schema()
     elif AGENT_ARCH == "specialist":
         logger.info("Agent architecture: phased specialist (sequential handoff)")
-        llm = task_specialist_agent.build_llm()
-        task_specialist_agent.register_tools(llm)
-        system_prompt = task_specialist_agent.get_initial_system_prompt()
-        tools = task_specialist_agent.get_initial_tools_schema()
+        llm = specialist.build_llm()
+        specialist.register_tools(llm)
+        system_prompt = specialist.get_initial_system_prompt()
+        tools = specialist.get_initial_tools_schema()
     else:
         logger.info("Agent architecture: single context")
-        llm = agent.build_llm()
-        agent.register_tools(llm)
+        llm = single.build_llm()
+        single.register_tools(llm)
         system_prompt = build_system_prompt()
-        tools = agent.get_tools_schema()
+        tools = single.get_tools_schema()
 
     messages = [
         {

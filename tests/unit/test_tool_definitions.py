@@ -1,7 +1,7 @@
 """Unit tests for the tool definitions and the handler registry."""
 
-from agent import TOOL_HANDLERS
-from tool_schemas import TOOL_SCHEMAS
+from voice_agent.core.runtime import TOOL_HANDLERS
+from voice_agent.tools.schemas import TOOL_SCHEMAS
 
 REQUIRED_BY_README = {
     "create_patient",

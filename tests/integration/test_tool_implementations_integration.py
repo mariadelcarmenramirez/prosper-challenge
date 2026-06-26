@@ -13,7 +13,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-import tool_implementations
+from voice_agent.tools import implementations as tool_implementations
 
 BASE = os.environ.get("EHR_BASE_URL", "http://localhost:8000")
 

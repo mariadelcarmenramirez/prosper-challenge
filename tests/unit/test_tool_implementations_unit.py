@@ -3,7 +3,7 @@
 import httpx
 import respx
 
-import tool_implementations
+from voice_agent.tools import implementations as tool_implementations
 
 BASE = tool_implementations.EHR_BASE_URL
 

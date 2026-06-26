@@ -1,45 +1,3 @@
-"""Supervisor-workers variant of the scheduling brain.
-
-The third interchangeable architecture, alongside the single-context agent
-(``agent.py``) and the phased specialist (``task_specialist_agent.py``).
-``bot.py`` selects it with ``AGENT_ARCH=supervisor``.
-
-Unlike the other two, this is a genuine **supervisor-workers (orchestrator)**
-design:
-
-* The **supervisor** is the LLM in the voice pipeline. It is the only one that
-  talks to the caller, and it owns the conversation from start to finish. It has
-  no EHR tools — only three *delegation* tools, one per worker.
-* The **workers** — Identifier, Booker, Canceller — are LLM sub-agents. They never
-  talk to the caller. When the supervisor delegates, a worker runs its own bounded
-  tool-calling loop against the EHR (out of band, via a direct OpenAI client),
-  then **returns a short report up to the supervisor**, which relays it to the
-  caller. Control always returns to the supervisor.
-
-How the three architectures line up:
-
-* ``agent.py`` — one context, every tool available at once.
-* ``task_specialist_agent.py`` — one brain; a ``transfer_to_*`` call swaps the
-  prompt + tool subset on a shared transcript; control moves laterally, one-way.
-* ``supervisor_agent.py`` (this) — a supervisor LLM delegates to worker sub-agents
-  that run and report back up; the supervisor stays in control throughout.
-
-State handling: the supervisor never has to juggle ids. A per-call ``SessionState``
-is updated by *observing* the workers' EHR results (the patient_id/name from
-identify, the held appointment from a booking), and the booking/cancel delegations
-auto-inject that state into the worker's task. So the supervisor's delegation tools
-take only plain-words ``request`` strings.
-
-Loop-safety is shared with the other two: every EHR call a worker makes goes
-through the same per-call ``CallGuard`` (empty-availability / rejected-offer
-streaks + the global ceiling). Each worker loop is additionally hard-bounded by
-``WORKER_MAX_STEPS``, and a delegation that trips the global ceiling ends the call
-programmatically, exactly like the single agent.
-
-The clinic rules / speaking style / HARD STOP preamble is reused verbatim from the
-phased specialist so an A/B test compares structure, not prose.
-"""
-
 import json
 import os
 from collections.abc import Awaitable, Callable
@@ -52,20 +10,17 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
 
-from agent import (  # noqa: F401  (build_llm re-exported for bot.py)
-    MAX_TOTAL_TOOL_CALLS,
-    TOOL_HANDLERS,
-    CallGuard,
-    _end_call,
-    _with_stop,
-    build_llm,
-)
-from task_specialist_agent import _preamble
+# Build on the shared kernel (guard + runtime) and the shared prompt header, never
+# on a sibling architecture, so the supervisor reuses identical loop-safety and the
+# same clinic preamble without importing a sibling architecture.
+from ..core.guard import MAX_TOTAL_TOOL_CALLS, CallGuard, with_stop
+from ..core.prompts import always_on_rules
+from ..core.runtime import TOOL_HANDLERS, build_llm, end_call
 
 # Aliased to avoid colliding with the supervisor's own ``cancel_appointment``
 # delegation tool defined below: this is the EHR tool the workers actually call.
-from tool_schemas import cancel_appointment as _ehr_cancel_appointment
-from tool_schemas import (
+from ..tools.schemas import cancel_appointment as _ehr_cancel_appointment
+from ..tools.schemas import (
     confirm_appointment,
     confirm_patient_data,
     create_appointment,
@@ -184,7 +139,7 @@ def _update_state(state: SessionState, name: str, result: Any) -> None:
 
 def _build_worker_preamble(now: datetime | None, role: str) -> str:
     """Shared worker header: the clinic preamble plus 'you don't talk to the caller'."""
-    return _preamble(now, "Prosper Health") + f"""
+    return always_on_rules(now, "Prosper Health") + f"""
 YOU ARE THE {role} WORKER. You do NOT talk to the caller — a supervisor relays your results, so \
 write a short report (1-2 sentences) for the supervisor, not a spoken line. Use your tools to do \
 the work. If any tool result contains "stop": true, do not call more tools — just report the \
@@ -349,7 +304,7 @@ async def _execute_tool(
     _update_state(state, name, result)
     streak = guard.update(name, result)
     if streak is not None:
-        result = _with_stop(result, streak)
+        result = with_stop(result, streak)
     return result
 
 
@@ -402,7 +357,7 @@ async def _run_agent_loop(
 
 
 def build_supervisor_prompt(now: datetime | None = None, clinic_name: str = "Prosper Health") -> str:
-    return _preamble(now, clinic_name) + """
+    return always_on_rules(now, clinic_name) + """
 YOU ARE THE SUPERVISOR. You are the only one who speaks with the caller, and you own the whole call. \
 You have NO EHR tools; instead you orchestrate three specialist workers and relay what they report, \
 in your own warm words:
@@ -449,7 +404,7 @@ class Supervisor:
     """Per-call object that wires the supervisor LLM to its three worker sub-agents.
 
     One instance per call (created in ``bot.py``). Mirrors the public surface of
-    ``agent`` / ``task_specialist_agent`` so ``bot.py`` can treat all three the same.
+    ``single`` / ``specialist`` so ``bot.py`` can treat all three the same.
     """
 
     def __init__(self, now: datetime | None = None) -> None:
@@ -505,7 +460,7 @@ class Supervisor:
                 await params.result_callback(
                     {"report": report, "stop": True, "reason": "tool_call_limit"}
                 )
-                await _end_call(params)
+                await end_call(params)
                 return
             await params.result_callback({"report": report})
 

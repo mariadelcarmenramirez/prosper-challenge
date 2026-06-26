@@ -1,8 +1,10 @@
 """Phased-specialist ("sequential handoff") variant of the scheduling brain.
 
-An alternative wiring to the single-context agent in ``agent.py``. The two are
-A/B-tested side by side: ``bot.py`` picks between them with the ``TASK_SPECIALIST``
-flag, and this module never touches ``agent.py``'s flow — it builds on top of it.
+An alternative wiring to the single-context agent (``architectures/single.py``). The three are
+A/B-tested side by side: ``bot.py`` picks between them with the ``AGENT_ARCH`` flag.
+This module shares only the kernel (``guard`` + ``runtime``) and the prompt header
+(``prompts``) with the other architectures; it never imports a sibling, so none of
+the three depend on each other.
 
 The idea is the idiomatic voice pattern: exactly one LLM is active at a time, and
 the conversation moves through three phases — IDENTIFY -> (BOOK | CANCEL). Each
@@ -27,15 +29,15 @@ endpoint — they only swap phase state), so keeping the whole second architectu
 in one self-contained file makes it trivial to A/B against the single agent.
 
 Loop-safety is identical to the single agent: we reuse ``CallGuard`` and the same
-``_make_handler`` from ``agent.py``, so empty-availability / rejected-offer streaks
-and the global tool-call ceiling behave the same here. Transfer tools are bounded
+``make_handler`` from the shared ``guard``/``runtime`` kernel, so empty-availability
+/ rejected-offer streaks and the global tool-call ceiling behave the same here. Transfer tools are bounded
 by construction (once you leave IDENTIFY the transfer tools are no longer offered),
 so they bypass the guard rather than risk aborting mid-handoff.
 
 Known trade-off of the strict subsets: a caller who reaches CANCEL but has no
 appointments cannot be booked in the same call, because the Canceller has no
 booking tools and no transfer tool. That is the price of fully isolating phases;
-the single-context agent in ``agent.py`` does not have this limitation.
+the single-context agent (``architectures/single.py``) does not have this limitation.
 """
 
 from collections.abc import Callable
@@ -47,14 +49,19 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
 
-# Reuse the single agent's tool registry and loop-safety verbatim so both
-# architectures share identical handler behaviour (find_patient None-normalizing,
-# streak signals, and the global circuit breaker). We intentionally do not modify
-# agent.py — only build on top of it. ``build_llm`` is re-exported so bot.py can
-# call this module exactly like it calls agent.py.
-from agent import TOOL_HANDLERS, CallGuard, _make_handler, build_llm  # noqa: F401
-from prompts import TZ
-from tool_schemas import (
+# Build on the shared kernel (guard + runtime) and the shared prompt header, never
+# on a sibling architecture, so this phase machine shares identical handler
+# behaviour (find_patient None-normalizing, streak signals, the global circuit
+# breaker) without coupling to a sibling architecture. ``build_llm`` is re-exported so bot.py can
+# call this module exactly like it calls the other architectures.
+from ..core.guard import CallGuard
+from ..core.prompts import always_on_rules
+from ..core.runtime import (  # noqa: F401  (build_llm re-exported)
+    TOOL_HANDLERS,
+    build_llm,
+    make_handler,
+)
+from ..tools.schemas import (
     cancel_appointment,
     confirm_appointment,
     confirm_patient_data,
@@ -103,51 +110,13 @@ transfer_to_cancellation = FunctionSchema(
 # --- Phase prompts ----------------------------------------------------------
 
 
-def _preamble(now: datetime | None, clinic_name: str) -> str:
-    """Shared header: clinic identity, today's date, speaking style, safety.
-
-    Mirrors the always-on rules in ``prompts.build_system_prompt`` so behaviour
-    (date resolution, never reading ids out loud, the HARD STOP contract) is the
-    same regardless of which phase the model is in.
-    """
-    now = now or datetime.now(TZ)
-    today_str = now.strftime("%A, %Y-%m-%d")
-    return f"""You are a warm, concise voice receptionist for {clinic_name}, a medical clinic \
-with a single doctor.
-
-Today is {today_str} ({now.year}), clinic local time (Europe/Madrid). Use this to resolve \
-relative dates like "this Wednesday", "next Monday", "tomorrow" into exact calendar dates.
-
-CLINIC RULES
-- Appointments are 1 hour long and start on the hour.
-- Open Monday to Friday, 9:00 to 18:00 (the last appointment starts at 17:00). Closed weekends.
-
-HOW YOU SPEAK
-- You are talking out loud on a phone call. Keep replies short and natural.
-- Say dates and times in words ("Monday the 6th of July at 10 in the morning"), never as ISO \
-strings or numbers like 2026-07-06T10:00:00.
-- Never read out ids, UUIDs, or JSON. Never invent appointment times, availability, or ids — only \
-use what the tools return.
-- When you call a tool, pass dates as YYYY-MM-DD and appointment times as YYYY-MM-DDTHH:MM:SS.
-
-GENERAL
-- Always confirm the exact date and time out loud before any create, confirm, or cancel.
-- If a tool returns an error, apologise briefly and either try once more or ask the caller to call \
-back later. Never expose technical details or error codes.
-- HARD STOP: if any tool result contains "stop": true, the system has cut the conversation off — do \
-NOT call any more tools. Give one short, warm apology that fits the "reason" and say goodbye: \
-"no_availability" → there's no availability that works right now; "too_many_rejections" → we \
-couldn't find a time that suits today; anything else → a brief general apology. Then stop.
-"""
-
-
 def build_identifier_prompt(
     now: datetime | None = None,
     patient_id: str | None = None,
     clinic_name: str = "Prosper Health",
 ) -> str:
     """IDENTIFY phase: validate identity, find-or-register, then route."""
-    return _preamble(now, clinic_name) + """
+    return always_on_rules(now, clinic_name) + """
 YOUR ROLE RIGHT NOW — identify the caller, then route them. You can only identify and hand off; you \
 have no booking or cancellation tools, so never promise to book or cancel yourself.
 
@@ -184,7 +153,7 @@ def build_booker_prompt(
 ) -> str:
     """BOOK phase: the booking loop for an already-identified caller."""
     who = f"patient_id {patient_id}" if patient_id else "the identified caller"
-    return _preamble(now, clinic_name) + f"""
+    return always_on_rules(now, clinic_name) + f"""
 YOUR ROLE RIGHT NOW — book a new appointment for an already-identified caller ({who}). Use that \
 patient_id for every booking tool call. The caller is already verified; do not re-identify them.
 
@@ -217,7 +186,7 @@ def build_canceller_prompt(
 ) -> str:
     """CANCEL phase: the cancellation flow for an already-identified caller."""
     who = f"patient_id {patient_id}" if patient_id else "the identified caller"
-    return _preamble(now, clinic_name) + f"""
+    return always_on_rules(now, clinic_name) + f"""
 YOUR ROLE RIGHT NOW — cancel an existing appointment for an already-identified caller ({who}). Use \
 that patient_id. The caller is already verified; do not re-identify them.
 
@@ -342,7 +311,7 @@ def register_tools(llm: OpenAILLMService, guard: CallGuard | None = None) -> Cal
     """
     guard = guard or CallGuard()
     for name, coro in TOOL_HANDLERS.items():
-        llm.register_function(name, _make_handler(name, coro, guard))
+        llm.register_function(name, make_handler(name, coro, guard))
     for name, phase in TRANSFERS.items():
         llm.register_function(name, _make_transfer_handler(phase))
     return guard

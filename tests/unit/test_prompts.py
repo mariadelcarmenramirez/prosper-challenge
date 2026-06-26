@@ -3,7 +3,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from prompts import build_system_prompt
+from voice_agent.core.prompts import build_system_prompt
 
 MADRID = ZoneInfo("Europe/Madrid")
 

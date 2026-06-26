@@ -1,9 +1,9 @@
 """Unit tests for the phased-specialist (sequential handoff) agent.
 
-These cover the parts unique to ``task_specialist_agent.py``: the per-phase tool
+These cover the parts unique to ``architectures/specialist.py``: the per-phase tool
 subsets, the transfer-tool routing, registration of every handler, and the core
 mechanic — a ``transfer_to_*`` call swapping the live context's system prompt and
-offered tool subset. Loop-safety itself is reused from ``agent.py`` and already
+offered tool subset. Loop-safety itself is reused from ``guard.py`` and already
 covered by ``test_call_guard.py``.
 """
 
@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from pipecat.processors.aggregators.llm_context import LLMContext
 
-import task_specialist_agent as tsa
+import voice_agent.architectures.specialist as tsa
 
 IDENTIFY_TOOLS = {
     "confirm_patient_data",
