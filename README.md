@@ -55,9 +55,6 @@ To get started, fork this repository so that you can start commiting and pushing
 uv run bot.py
 ```
 
-Select the agent architecture with the `AGENT_ARCH` env var: `single` (default),
-`specialist`, or `supervisor`.
-
 **Open http://localhost:7860 in your browser** and click `Connect` to start talking to your bot.
 
 > 💡 First run note: The initial startup may take ~20 seconds as Pipecat downloads required models and imports.
