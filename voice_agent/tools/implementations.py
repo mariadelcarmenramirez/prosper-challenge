@@ -9,6 +9,7 @@ return ``{"error": "..."}`` so the agent can apologise gracefully instead of
 crashing the call.
 """
 
+import asyncio
 import os
 
 import httpx
@@ -16,18 +17,47 @@ import httpx
 EHR_BASE_URL = os.environ.get("EHR_BASE_URL", "http://localhost:8000")
 TIMEOUT = httpx.Timeout(10.0)
 
+# Reads (GET) are safe to retry: re-running them can't change server state. Writes
+# (POST/DELETE) are NOT retried here — a request that reached the server before the
+# connection dropped may have already created the patient/appointment, so a blind
+# retry could double-book. Those need an idempotency key to be retried safely.
+GET_MAX_ATTEMPTS = 3  # total attempts for a GET (1 try + up to 2 retries)
+RETRY_BACKOFF = 0.3  # seconds; grows per attempt (0.3s, 0.6s, ...)
+
+
+def _is_retryable(resp: httpx.Response) -> bool:
+    """Only server-side errors (5xx) are worth retrying; a 4xx won't fix itself."""
+    return resp.status_code >= 500
+
 
 async def _request(method: str, path: str, **kwargs):
-    """Issue a request and return parsed JSON, or an error dict."""
-    try:
-        async with httpx.AsyncClient(base_url=EHR_BASE_URL, timeout=TIMEOUT) as client:
-            resp = await client.request(method, path, **kwargs)
-    except httpx.HTTPError:
-        return {"error": "I'm having trouble reaching the scheduling system right now."}
-    if resp.status_code >= 400:
-        detail = _detail(resp)
-        return {"error": detail, "status_code": resp.status_code}
-    return resp.json()
+    """Issue a request and return parsed JSON, or an error dict.
+
+    GET requests are retried a few times on transient failures (network error or
+    5xx); every other method is attempted exactly once to avoid duplicate writes.
+    """
+    attempts = GET_MAX_ATTEMPTS if method.upper() == "GET" else 1
+    fallback = {"error": "I'm having trouble reaching the scheduling system right now."}
+
+    for attempt in range(attempts):
+        try:
+            async with httpx.AsyncClient(base_url=EHR_BASE_URL, timeout=TIMEOUT) as client:
+                resp = await client.request(method, path, **kwargs)
+        except httpx.HTTPError:
+            fallback = {"error": "I'm having trouble reaching the scheduling system right now."}
+        else:
+            if resp.status_code >= 400:
+                if _is_retryable(resp) and attempt < attempts - 1:
+                    fallback = {"error": _detail(resp), "status_code": resp.status_code}
+                else:
+                    return {"error": _detail(resp), "status_code": resp.status_code}
+            else:
+                return resp.json()
+
+        if attempt < attempts - 1:
+            await asyncio.sleep(RETRY_BACKOFF * (attempt + 1))
+
+    return fallback
 
 
 def _detail(resp: httpx.Response) -> str:
