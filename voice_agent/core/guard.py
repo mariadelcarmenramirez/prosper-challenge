@@ -3,8 +3,8 @@
 This is the pure-logic half of the runtime kernel: the streak/circuit-breaker
 state machine plus the small stop-signal helpers. It has no Pipecat, audio, or
 network dependency, so it is trivially unit-testable and can be imported by the
-single-context agent, the phased specialist, and the supervisor alike without any
-of them depending on each other.
+single-context agent and the supervisor alike without any of them depending on
+each other.
 
 The system prompt asks the model to give up politely after a few empty-availability
 rounds or rejected offers, but a prompt is only a request. ``CallGuard`` turns those

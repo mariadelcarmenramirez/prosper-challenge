@@ -1,11 +1,11 @@
 """Uniform adapters over the three agent architectures.
 
-The runner shouldn't care whether it is driving the single-context agent, the
-phased specialist, or the supervisor — it only needs, per call: an initial system
-prompt, an initial tool subset, and a registry to dispatch tool calls into. This
-module builds each architecture through its *real* public surface (so the genuine
-prompts, ``CallGuard``, phase swaps and worker loops are exercised) and returns
-that uniform :class:`AgentSetup`.
+The runner shouldn't care whether it is driving the single-context agent or the
+supervisor — it only needs, per call: an initial system prompt, an initial tool
+subset, and a registry to dispatch tool calls into. This module builds each
+architecture through its *real* public surface (so the genuine prompts,
+``CallGuard``, and worker loops are exercised) and returns that uniform
+:class:`AgentSetup`.
 
 The one architecture that needs special handling is the supervisor: its nested
 worker loop runs its own OpenAI client, so we (a) inject the instrumented client
@@ -20,14 +20,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from voice_agent.architectures import single, specialist, supervisor
+from voice_agent.architectures import single, supervisor
 from voice_agent.architectures.supervisor import _run_agent_loop as _ORIG_WORKER_LOOP
 from voice_agent.core.guard import CallGuard
 from voice_agent.core.prompts import build_system_prompt
 
 from .shim import FakeLLM, FakeLLMContext
 
-ARCHITECTURES = ("single", "specialist", "supervisor")
+ARCHITECTURES = ("single", "supervisor")
 
 
 @dataclass
@@ -49,16 +49,6 @@ def _build_single(model: str, now: datetime | None) -> AgentSetup:
         tools=single.get_tools_schema(),
     )
     return AgentSetup("single", model, llm, context, guard)
-
-
-def _build_specialist(model: str, now: datetime | None) -> AgentSetup:
-    llm = FakeLLM()
-    guard = specialist.register_tools(llm, now=now)
-    context = FakeLLMContext(
-        messages=[{"role": "system", "content": specialist.get_initial_system_prompt(now=now)}],
-        tools=specialist.get_initial_tools_schema(),
-    )
-    return AgentSetup("specialist", model, llm, context, guard)
 
 
 def _patch_worker_model(model: str) -> None:
@@ -93,8 +83,6 @@ def build_agent(arch: str, model: str, now: datetime | None, agent_client: Any) 
     """Construct one architecture, wired to the shim, ready for the runner."""
     if arch == "single":
         return _build_single(model, now)
-    if arch == "specialist":
-        return _build_specialist(model, now)
     if arch == "supervisor":
         return _build_supervisor(model, now, agent_client)
     raise ValueError(f"Unknown architecture: {arch!r} (expected one of {ARCHITECTURES})")

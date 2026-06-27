@@ -3,9 +3,8 @@
 It alternates between the agent under test and the LLM-simulated caller, exactly
 like a phone call but with no audio. Per agent turn it runs the architecture's real
 tool-calling loop (dispatching each model tool call through the genuine registered
-handler, which carries the real ``CallGuard`` and, for the specialist, the real
-phase swap), measures the wall-clock latency of the whole turn (nested worker calls
-included), and records everything on the trace. The call ends when the agent
+handler, which carries the real ``CallGuard``), measures the wall-clock latency of
+the whole turn (nested worker calls included), and records everything on the trace. The call ends when the agent
 signals a graceful stop (``stop: true`` / ``EndTaskFrame``), the caller hangs up,
 or a safety turn cap is hit.
 """
@@ -120,7 +119,7 @@ class ConversationRunner:
                 if _stop_seen(result) or self.setup.llm.end_requested:
                     self._stop = True
                     self.trace.end_reason = self._reason(result)
-            # A phase swap (specialist) may have changed the offered tools mid-turn.
+            # A handler may have changed the offered tools mid-turn.
             tools = [_to_openai_tool(s) for s in self.setup.context.tools.standard_tools]
         latency = time.perf_counter() - t0
         self.trace.agent_turn_latencies.append(round(latency, 4))

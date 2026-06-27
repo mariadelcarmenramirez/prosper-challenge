@@ -8,14 +8,14 @@ touch are a tiny slice of Pipecat's surface:
 * ``params.arguments`` / ``params.result_callback`` — how a handler receives args
   and returns a result.
 * ``params.llm.push_frame(EndTaskFrame(), ...)`` — how ``end_call`` ends a call.
-* ``params.context.{messages,set_messages,set_tools,tools}`` — how the phased
-  specialist swaps its system prompt and tool subset mid-call.
+* ``params.context.{messages,set_messages,set_tools,tools}`` — how an architecture
+  reads and updates its system prompt and tool subset mid-call.
 
 This module reimplements *only* that slice with in-memory objects, so the eval can
-drive ``single``, ``specialist`` and ``supervisor`` through their genuine code
-paths (real prompts, ``make_handler``, ``CallGuard``, phase swaps, nested workers)
-without a transport, audio, or a websocket. Nothing here mocks agent behaviour;
-it only stands in for the pipeline plumbing.
+drive ``single`` and ``supervisor`` through their genuine code paths (real
+prompts, ``make_handler``, ``CallGuard``, nested workers) without a transport,
+audio, or a websocket. Nothing here mocks agent behaviour; it only stands in for
+the pipeline plumbing.
 """
 
 from __future__ import annotations
@@ -32,9 +32,9 @@ class FakeLLMContext:
     """Stand-in for Pipecat's ``LLMContext``: holds the conversation + tool subset.
 
     The runner uses ``messages`` as the single source of truth for the conversation
-    and ``tools`` for the offered functions. The phased specialist mutates both via
-    ``set_messages`` / ``set_tools`` from inside a transfer handler, exactly as it
-    does in production, so phase swaps take effect on the very next agent turn.
+    and ``tools`` for the offered functions. An architecture can mutate both via
+    ``set_messages`` / ``set_tools`` from inside a handler, exactly as it does in
+    production, so changes take effect on the very next agent turn.
     """
 
     def __init__(self, messages: list[dict], tools: ToolsSchema) -> None:

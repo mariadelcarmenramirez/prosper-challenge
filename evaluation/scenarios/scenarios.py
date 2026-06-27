@@ -9,7 +9,7 @@ availability loop terminating via the call guard — plus the other failure mode
 scheduling agent must get right (confirm-before-mutate, invalid-time rejection,
 slot already taken, misheard details).
 
-The same suite runs against all three architectures and all models, so a single
+The same suite runs against both architectures and all models, so a single
 table can compare accuracy across the matrix.
 """
 

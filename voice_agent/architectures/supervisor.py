@@ -404,7 +404,7 @@ class Supervisor:
     """Per-call object that wires the supervisor LLM to its three worker sub-agents.
 
     One instance per call (created in ``bot.py``). Mirrors the public surface of
-    ``single`` / ``specialist`` so ``bot.py`` can treat all three the same.
+    ``single`` so ``bot.py`` can treat both the same.
     """
 
     def __init__(self, now: datetime | None = None) -> None:

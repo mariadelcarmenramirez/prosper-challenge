@@ -14,7 +14,7 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.openai.llm import OpenAILLMService
 
 from ..core.guard import CallGuard
-from ..core.runtime import (  # noqa: F401  (build_llm re-exported)
+from ..core.runtime import (  
     TOOL_HANDLERS,
     build_llm,
     make_handler,

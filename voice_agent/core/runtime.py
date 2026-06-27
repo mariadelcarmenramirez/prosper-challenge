@@ -5,9 +5,9 @@ This is the transport-facing half of the kernel (the pure-logic half lives in
 EHR implementation, the factory that wraps an implementation in a Pipecat handler
 with loop-safety attached, the graceful call-end frame, and the LLM constructor.
 
-Every architecture (single-context ``agent``, phased ``task_specialist_agent``,
-and ``supervisor_agent``) builds on this module and on ``guard``; none of them
-depends on another, so a change to one flow cannot break the others.
+Every architecture (single-context ``agent`` and ``supervisor_agent``) builds on
+this module and on ``guard``; none of them depends on another, so a change to one
+flow cannot break the others.
 """
 
 import os

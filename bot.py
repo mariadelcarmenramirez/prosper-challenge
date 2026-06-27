@@ -58,7 +58,7 @@ from pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy import (
 )
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
-from voice_agent.architectures import single, specialist, supervisor
+from voice_agent.architectures import single, supervisor
 from voice_agent.core.prompts import build_system_prompt
 
 logger.info("✅ All components loaded successfully!")
@@ -85,12 +85,6 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         orchestrator.register_tools(llm)
         system_prompt = orchestrator.get_initial_system_prompt()
         tools = orchestrator.get_initial_tools_schema()
-    elif AGENT_ARCH == "specialist":
-        logger.info("Agent architecture: phased specialist (sequential handoff)")
-        llm = specialist.build_llm()
-        specialist.register_tools(llm)
-        system_prompt = specialist.get_initial_system_prompt()
-        tools = specialist.get_initial_tools_schema()
     else:
         logger.info("Agent architecture: single context")
         llm = single.build_llm()

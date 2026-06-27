@@ -2,7 +2,7 @@
 
 Drives every (architecture x model x scenario) cell as a text-only simulated call
 against a live EHR on a dedicated ``*_test`` database, then writes the trace JSONL
-and the CSV comparison tables. The default matrix is 3 architectures x N models x
+and the CSV comparison tables. The default matrix is 2 architectures x N models x
 11 scenarios (no repetitions — the scenario spread is the variability), and every
 axis is filterable so you can run a slice cheaply:
 

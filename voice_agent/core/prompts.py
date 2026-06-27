@@ -10,8 +10,8 @@ not the source of truth.
 Composition:
 * ``clinic_preamble`` — identity + date + clinic rules + how to speak.
 * ``SAFETY_CONTRACT`` — the always-on GENERAL + HARD STOP block.
-* ``always_on_rules`` — preamble + safety, the header the phased specialist and
-  the supervisor prepend to their per-role flow text.
+* ``always_on_rules`` — preamble + safety, the header the supervisor prepends to
+  its per-role flow text.
 * ``build_system_prompt`` — the single-context agent's full prompt: preamble, the
   whole identify/book/cancel flow, then the safety contract.
 """
@@ -61,12 +61,12 @@ couldn't find a time that suits today; anything else → a brief general apology
 
 
 def always_on_rules(now: datetime | None = None, clinic_name: str = "Prosper Health") -> str:
-    """The full always-on header (preamble + safety) prepended by the specialist and supervisor."""
+    """The full always-on header (preamble + safety) prepended by the supervisor."""
     return clinic_preamble(now, clinic_name) + SAFETY_CONTRACT
 
 
-# The single-context agent's whole conversation flow. The phased specialist and the
-# supervisor split equivalent logic across their own per-role prompts instead.
+# The single-context agent's whole conversation flow. The supervisor splits
+# equivalent logic across its own per-role prompts instead.
 _SINGLE_AGENT_FLOW = """
 STEP 1 — IDENTIFY THE CALLER
 - Greet them, then collect three things: full name, date of birth, and phone number. Ask for \
