@@ -1,5 +1,6 @@
 import json
 import os
+import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,6 +8,8 @@ from typing import Any
 
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.frames.frames import TTSSpeakFrame
+from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
 
@@ -15,7 +18,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 # same clinic preamble without importing a sibling architecture.
 from ..core.guard import MAX_TOTAL_TOOL_CALLS, CallGuard, with_stop
 from ..core.prompts import always_on_rules
-from ..core.runtime import TOOL_HANDLERS, build_llm, end_call
+from ..core.runtime import ACK_PHRASES, TOOL_HANDLERS, build_llm, end_call
 
 # Aliased to avoid colliding with the supervisor's own ``cancel_appointment``
 # delegation tool defined below: this is the EHR tool the workers actually call.
@@ -444,6 +447,14 @@ class Supervisor:
 
     def _make_delegation_handler(self, worker: Worker):
         async def handler(params: FunctionCallParams) -> None:
+            # Delegating to a worker means a backend round-trip is starting; let the
+            # caller know we got their info instead of leaving them in silence. One
+            # delegation runs per caller turn, so no debounce is needed here. Skip it
+            # if we're already over the ceiling and about to end the call.
+            if self.guard.total_calls < MAX_TOTAL_TOOL_CALLS:
+                await params.llm.push_frame(
+                    TTSSpeakFrame(random.choice(ACK_PHRASES)), FrameDirection.DOWNSTREAM
+                )
             report = await _run_agent_loop(
                 system_prompt=worker.build_prompt(self._now),
                 tools=worker.openai_tools(),

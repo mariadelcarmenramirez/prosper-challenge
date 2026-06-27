@@ -10,7 +10,7 @@ from ``guard.py`` and covered by ``test_call_guard.py``.
 import json
 from types import SimpleNamespace
 
-from pipecat.frames.frames import EndTaskFrame
+from pipecat.frames.frames import EndTaskFrame, TTSSpeakFrame
 
 import voice_agent.architectures.supervisor as sup
 from voice_agent.core.guard import MAX_TOTAL_TOOL_CALLS, CallGuard
@@ -204,7 +204,9 @@ async def test_delegation_handler_returns_worker_report():
     await handler(_params({"request": "Tuesday morning"}, calls))
 
     assert calls["result"] == {"report": "All done."}
-    assert "frames" not in calls
+    # A spoken acknowledgement is played as the delegation starts so the caller is
+    # not left in silence during the backend round-trip.
+    assert len(calls["frames"]) == 1 and isinstance(calls["frames"][0], TTSSpeakFrame)
 
 
 async def test_delegation_handler_ends_call_at_global_ceiling():

@@ -73,7 +73,17 @@ def validate_bookable(starts_at: datetime) -> datetime:
 
 
 def _appt(row: asyncpg.Record) -> AppointmentResponse:
-    return AppointmentResponse(**dict(row))
+    # asyncpg decodes TIMESTAMPTZ as UTC-aware datetimes. Re-express the
+    # timestamps in clinic-local time so every endpoint reports the same
+    # wall-clock hour as /slots (which builds its datetimes with tzinfo=TZ).
+    # Without this, a 16:00+02:00 booking reads back as 14:00+00:00 and any
+    # consumer that looks at the hour sees 2pm instead of 4pm.
+    data = dict(row)
+    for field in ("starts_at", "ends_at", "held_until"):
+        value = data.get(field)
+        if value is not None:
+            data[field] = value.astimezone(TZ)
+    return AppointmentResponse(**data)
 
 
 # --- Availability -----------------------------------------------------------

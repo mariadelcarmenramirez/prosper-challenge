@@ -11,10 +11,12 @@ flow cannot break the others.
 """
 
 import os
+import random
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from pipecat.frames.frames import EndTaskFrame
+from pipecat.frames.frames import EndTaskFrame, TTSSpeakFrame
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
@@ -43,8 +45,42 @@ async def end_call(params: FunctionCallParams) -> None:
     await params.llm.push_frame(EndTaskFrame(), FrameDirection.UPSTREAM)
 
 
-def make_handler(name: str, coro: Callable[..., Awaitable[Any]], guard: CallGuard):
-    """Wrap an EHR coroutine in a Pipecat function handler with loop-safety attached."""
+# Short spoken acknowledgements played the instant a backend lookup starts, so the
+# caller hears that we got their info instead of dead air while the EHR + LLM work.
+ACK_PHRASES = (
+    "Okay, perfect — give me just a moment.",
+    "Got it, let me check that for you.",
+    "Thank you, one moment please.",
+    "Alright, bear with me one second.",
+)
+# One user turn can fire a short burst of tool calls (e.g. find then create). Debounce
+# so we acknowledge once per turn, not once per tool — a genuinely new turn is always
+# separated by the caller speaking again, which is far longer than this window.
+ACK_DEBOUNCE_SECS = 4.0
+
+
+async def speak_ack(params: FunctionCallParams, ack_state: dict[str, float]) -> None:
+    """Speak a brief filler the moment a tool runs, debounced across a tool burst."""
+    now = time.monotonic()
+    if now - ack_state["last"] < ACK_DEBOUNCE_SECS:
+        return
+    ack_state["last"] = now
+    await params.llm.push_frame(
+        TTSSpeakFrame(random.choice(ACK_PHRASES)), FrameDirection.DOWNSTREAM
+    )
+
+
+def make_handler(
+    name: str,
+    coro: Callable[..., Awaitable[Any]],
+    guard: CallGuard,
+    ack_state: dict[str, float] | None = None,
+):
+    """Wrap an EHR coroutine in a Pipecat function handler with loop-safety attached.
+
+    When ``ack_state`` is provided, a short spoken acknowledgement is played as soon
+    as the tool starts so the caller is not left in silence during the lookup.
+    """
 
     async def handler(params: FunctionCallParams) -> None:
         # Circuit breaker first: if we are over the global ceiling, do not even
@@ -54,6 +90,10 @@ def make_handler(name: str, coro: Callable[..., Awaitable[Any]], guard: CallGuar
             await params.result_callback(signal)
             await end_call(params)
             return
+
+        # We have the caller's info and are about to hit the EHR: let them know.
+        if ack_state is not None:
+            await speak_ack(params, ack_state)
 
         result = await coro(**params.arguments)
         # find_patient returns None, a JSON-serializable signal for unknown patients.

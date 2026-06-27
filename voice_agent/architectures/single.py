@@ -30,8 +30,11 @@ def register_tools(llm: OpenAILLMService, guard: CallGuard | None = None) -> Cal
     caller (or a test/eval harness) can inspect or pre-seed the per-call state.
     """
     guard = guard or CallGuard()
+    # Shared across all handlers so the spoken acknowledgement is debounced per turn,
+    # not repeated for every tool in a burst (e.g. find_patient -> create_patient).
+    ack_state = {"last": 0.0}
     for name, coro in TOOL_HANDLERS.items():
-        llm.register_function(name, make_handler(name, coro, guard))
+        llm.register_function(name, make_handler(name, coro, guard, ack_state))
     return guard
 
 

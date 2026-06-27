@@ -81,6 +81,22 @@ async def test_cancel_frees_slot(client, patient):
     assert slot in {datetime.fromisoformat(s["starts_at"]) for s in slots}
 
 
+async def test_appointment_responses_use_clinic_local_time(client, patient):
+    # Regression: read-side endpoints must report the same wall-clock hour as
+    # /slots. asyncpg returns TIMESTAMPTZ in UTC, so without normalization a
+    # 16:00 booking reads back as 14:00 and the agent shows the wrong time.
+    slot = future_slot(hour=16)
+    created = (await _hold(client, patient["id"], slot)).json()
+    confirmed = (await client.post(f"/appointments/{created['id']}/confirm")).json()
+    listed = (await client.get("/appointments", params={"patient_id": patient["id"]})).json()[0]
+
+    for body in (created, confirmed, listed):
+        start = datetime.fromisoformat(body["starts_at"])
+        assert start == slot                          # same instant
+        assert start.astimezone(TZ).hour == 16        # same wall-clock hour as booked
+        assert start.utcoffset() == slot.utcoffset()  # clinic-local offset, not UTC
+
+
 async def test_create_rejects_past_returns_422(client, patient):
     past = (now() - timedelta(days=7)).replace(minute=0, second=0, microsecond=0)
     r = await _hold(client, patient["id"], past)

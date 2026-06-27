@@ -21,6 +21,11 @@ Run the bot using::
 import os
 
 from dotenv import load_dotenv
+
+# Load .env before importing modules whose constants read os.getenv() at import time
+# (e.g. voice_agent.core.guard).
+load_dotenv(override=True)
+
 from loguru import logger
 
 print("🚀 Starting Pipecat bot...")
@@ -62,8 +67,6 @@ from voice_agent.architectures import single, supervisor
 from voice_agent.core.prompts import build_system_prompt
 
 logger.info("✅ All components loaded successfully!")
-
-load_dotenv(override=True)
 
 AGENT_ARCH = os.environ.get("AGENT_ARCH", "single")
 
