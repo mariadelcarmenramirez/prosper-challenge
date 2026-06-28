@@ -1,19 +1,3 @@
-"""Uniform adapters over the three agent architectures.
-
-The runner shouldn't care whether it is driving the single-context agent or the
-supervisor — it only needs, per call: an initial system prompt, an initial tool
-subset, and a registry to dispatch tool calls into. This module builds each
-architecture through its *real* public surface (so the genuine prompts,
-``CallGuard``, and worker loops are exercised) and returns that uniform
-:class:`AgentSetup`.
-
-The one architecture that needs special handling is the supervisor: its nested
-worker loop runs its own OpenAI client, so we (a) inject the instrumented client
-so worker spend/latency is metered too, and (b) force the worker model to match
-the model under test, so "supervisor on gpt-5-nano" really means the whole system
-runs on gpt-5-nano rather than a gpt-5-nano brain delegating to gpt-4.1 workers.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

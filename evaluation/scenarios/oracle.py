@@ -1,12 +1,3 @@
-"""The oracle: deterministic pass/fail from a finished call.
-
-This is the accuracy signal. An oracle reads
-two sources of ground truth — the recorded tool trace and the final database
-rows — and returns a list of checks. "Hard" checks decide pass/fail; "soft" checks
-are recorded for insight (e.g. *did the loop guard actually fire?*) without failing
-a run when the agent reached the same good outcome another way.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

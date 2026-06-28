@@ -1,14 +1,3 @@
-"""The conversation runner: drives one simulated call end-to-end, text-only.
-
-It alternates between the agent under test and the LLM-simulated caller, exactly
-like a phone call but with no audio. Per agent turn it runs the architecture's real
-tool-calling loop (dispatching each model tool call through the genuine registered
-handler, which carries the real ``CallGuard``), measures the wall-clock latency of
-the whole turn (nested worker calls included), and records everything on the trace. The call ends when the agent
-signals a graceful stop (``stop: true`` / ``EndTaskFrame``), the caller hangs up,
-or a safety turn cap is hit.
-"""
-
 from __future__ import annotations
 
 import json
@@ -20,19 +9,19 @@ from typing import Any
 from voice_agent.architectures.supervisor import _serialize_tool_call, _to_openai_tool
 
 from .adapters import AgentSetup
-from .caller import CallerTurn, SimulatedCaller
+from .patient_simulator import PatientTurn, PatientCaller
 from .client import InstrumentedClient
 from .shim import FakeFunctionCallParams
 from .trace import ConversationTrace
 
 # Kick-off mirrors bot.py's on_client_connected: a system nudge to open the call.
 KICKOFF = (
-    "Greet the caller, introduce yourself as the Prosper Health scheduling "
+    "Greet the patient, introduce yourself as the Prosper Health scheduling "
     "assistant, and ask for their full name, date of birth and phone number "
     "so you can find them in the system."
 )
 
-MAX_CONVERSATION_TURNS = 24  # safety cap on caller<->agent exchanges
+MAX_CONVERSATION_TURNS = 24  # safety cap on patient<->agent exchanges
 MAX_TOOL_ITERS_PER_TURN = 16  # safety cap on the agent's tool loop within one turn
 
 
@@ -52,7 +41,7 @@ class ConversationRunner:
         self,
         setup: AgentSetup,
         agent_client: InstrumentedClient,
-        caller: SimulatedCaller,
+        caller: PatientCaller,
         trace: ConversationTrace,
         max_turns: int = MAX_CONVERSATION_TURNS,
     ) -> None:
@@ -80,9 +69,9 @@ class ConversationRunner:
             if self._stop:
                 self.trace.end_reason = self.trace.end_reason or "agent_ended"
                 return
-            turn: CallerTurn = await self._caller_turn(agent_text)
+            turn: PatientTurn = await self._patient_turn(agent_text)
             if turn.hang_up:
-                self.trace.end_reason = "caller_hangup"
+                self.trace.end_reason = "patient_hangup"
                 return
             self.setup.context.messages.append({"role": "user", "content": turn.text})
         self.trace.end_reason = "max_turns"
@@ -147,10 +136,10 @@ class ConversationRunner:
         )
         return result
 
-    async def _caller_turn(self, agent_text: str) -> CallerTurn:
+    async def _patient_turn(self, agent_text: str) -> PatientTurn:
         t0 = time.perf_counter()
         turn = await self.caller.respond(agent_text)
         latency = time.perf_counter() - t0
         self.trace.caller_turn_latencies.append(round(latency, 4))
-        self.trace.add("caller_turn", text=turn.text, hang_up=turn.hang_up, latency=round(latency, 4))
+        self.trace.add("patient_turn", text=turn.text, hang_up=turn.hang_up, latency=round(latency, 4))
         return turn

@@ -35,27 +35,26 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MODELS = ["gpt-4.1", "gpt-4.1-mini", "gpt-5-nano"]
+DEFAULT_MODELS = ["gpt-4.1-mini", "gpt-5-nano"]
 EVAL_API_PORT = int(os.environ.get("EVAL_API_PORT", "8011"))
 EVAL_DATABASE_URL = os.environ.get(
     "EVAL_DATABASE_URL", "postgresql://ehr:ehr@localhost:5432/ehr_test"
 )
 os.environ["EHR_BASE_URL"] = os.environ.get("EVAL_EHR_BASE_URL", f"http://localhost:{EVAL_API_PORT}")
 
-from dataclasses import asdict  # noqa: E402
+from dataclasses import asdict  
 
-import asyncpg  # noqa: E402
-from openai import AsyncOpenAI  # noqa: E402
+import asyncpg  
+from openai import AsyncOpenAI  
 
-from evaluation.harness.adapters import ARCHITECTURES, build_agent  # noqa: E402
-from evaluation.harness.caller import SimulatedCaller  # noqa: E402
-from evaluation.harness.client import InstrumentedClient  # noqa: E402
-from evaluation.harness.cost import Ledger  # noqa: E402
-from evaluation.harness.metrics import write_metrics  # noqa: E402
-from evaluation.harness.runner import ConversationRunner  # noqa: E402
-from evaluation.harness.trace import ConversationTrace, write_traces  # noqa: E402
-from evaluation.scenarios import db  # noqa: E402
-from evaluation.scenarios.scenarios import SCENARIOS  # noqa: E402
+from evaluation.harness.adapters import ARCHITECTURES, build_agent  
+from evaluation.harness.patient_simulator import PatientCaller  
+from evaluation.harness.client import InstrumentedClient, Ledger
+from evaluation.harness.metrics import write_metrics  
+from evaluation.harness.runner import ConversationRunner  
+from evaluation.harness.trace import ConversationTrace, write_traces  
+from evaluation.scenarios import db  
+from evaluation.scenarios.scenarios import SCENARIOS  
 
 # --- EHR API lifecycle ------------------------------------------------------
 
@@ -102,7 +101,7 @@ async def run_one(scenario, arch: str, model: str, caller_model: str, raw: Async
     ctx = await scenario.setup(conn)
 
     setup = build_agent(arch, model, now=None, agent_client=agent_client)
-    caller = SimulatedCaller(caller_client, caller_model, scenario.persona(ctx))
+    caller = PatientCaller(caller_client, caller_model, scenario.persona(ctx))
     runner = ConversationRunner(setup, agent_client, caller, trace)
     await runner.run()
 

@@ -1,18 +1,3 @@
-"""The edge-case scenario suite.
-
-Each :class:`Scenario` is a self-contained, controlled experiment: it seeds a known
-starting state, hands the simulated caller a persona + goal, and then judges the
-finished call with a deterministic oracle. The set covers the cases called out for
-this challenge — book the exact day/hour, cancel something that doesn't exist, two
-patients with the same name + date of birth but different phones, the empty-
-availability loop terminating via the call guard — plus the other failure modes a
-scheduling agent must get right (confirm-before-mutate, invalid-time rejection,
-slot already taken, misheard details).
-
-The same suite runs against both architectures and all models, so a single
-table can compare accuracy across the matrix.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable

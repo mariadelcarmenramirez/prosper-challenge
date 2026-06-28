@@ -1,28 +1,70 @@
-"""An instrumented OpenAI client: the one place every LLM call is shaped + metered.
-
-It is a drop-in for ``AsyncOpenAI`` (exposes ``.chat.completions.create``) so it
-works both for the runner's top-level agent/caller calls *and* when injected into
-the supervisor as ``_client_obj`` for its nested worker loop. Routing every call
-through here buys three things in one spot:
-
-1. **Per-family request shaping.** The matrix mixes classic chat models
-   (gpt-4.1*) with reasoning models (gpt-5*). Reasoning models reject
-   ``temperature`` and take a ``reasoning_effort`` knob instead. We normalize that
-   here so the architectures never have to care which family they're talking to.
-2. **Billed usage capture.** Every response's ``usage`` is folded into the
-   :class:`~evaluation.harness.cost.Ledger` (reasoning tokens included), tagged by
-   role so agent spend stays separate from the simulated caller's.
-3. **Per-call latency** is recorded on the trace, which is what lets us see *where*
-   the supervisor spends its time (top-level vs. each worker call).
-"""
-
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
-from .cost import Ledger
+import tiktoken
+
 from .trace import ConversationTrace
+
+# USD per 1,000,000 tokens: (input, output).
+PRICING: dict[str, tuple[float, float]] = {
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-5-nano": (0.05, 0.40),
+}
+
+
+def cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Dollar cost of one call's usage, from the per-1M pricing table."""
+    in_price, out_price = PRICING.get(model, (0.0, 0.0))
+    return (prompt_tokens * in_price + completion_tokens * out_price) / 1_000_000
+
+
+def count_tokens(text: str, model: str = "gpt-4.1-mini") -> int:
+    """Offline tiktoken estimate for plain text (cross-check only, not for billing).
+
+    Reasoning-token usage is invisible here; use the API ``usage`` for real cost.
+    """
+    try:
+        enc = tiktoken.encoding_for_model(model)
+    except KeyError:
+        enc = tiktoken.get_encoding("o200k_base")
+    return len(enc.encode(text))
+
+
+@dataclass
+class Ledger:
+    """Accumulates token usage, cost and call counts for one conversation.
+
+    Calls are tagged by ``role`` so the agent's own spend (the thing we compare
+    across architectures and models) is kept apart from the simulated caller's.
+    """
+
+    # Agent-side totals (the supervisor's nested worker calls land here too).
+    agent_calls: int = 0
+    agent_prompt_tokens: int = 0
+    agent_completion_tokens: int = 0
+    agent_cost_usd: float = 0.0
+    # Caller-side totals, tracked but excluded from the agent comparison.
+    caller_calls: int = 0
+    caller_cost_usd: float = 0.0
+    # Per-model agent spend, so a run can attribute cost when a worker model differs.
+    per_model_cost: dict[str, float] = field(default_factory=dict)
+
+    def record(self, role: str, model: str, prompt_tokens: int, completion_tokens: int) -> None:
+        cost = cost_usd(model, prompt_tokens, completion_tokens)
+        if role == "caller":
+            self.caller_calls += 1
+            self.caller_cost_usd += cost
+            return
+        # Everything that is not the caller counts as agent spend (agent, worker).
+        self.agent_calls += 1
+        self.agent_prompt_tokens += prompt_tokens
+        self.agent_completion_tokens += completion_tokens
+        self.agent_cost_usd += cost
+        self.per_model_cost[model] = self.per_model_cost.get(model, 0.0) + cost
+
 
 # GPT-5 reasoning models run at "low" effort by default in the eval: a voice agent
 # wants the lowest honest latency, and it keeps the comparison against the classic

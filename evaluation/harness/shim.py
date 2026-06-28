@@ -1,23 +1,3 @@
-"""A minimal, audio-free Pipecat shim so the *real* agent handlers run unchanged.
-
-The whole evaluation rests on the fact that the agent's "brain" is decoupled from
-audio (see the architecture modules). The only things the production tool handlers
-touch are a tiny slice of Pipecat's surface:
-
-* ``llm.register_function(name, handler)`` — how every architecture wires its tools.
-* ``params.arguments`` / ``params.result_callback`` — how a handler receives args
-  and returns a result.
-* ``params.llm.push_frame(EndTaskFrame(), ...)`` — how ``end_call`` ends a call.
-* ``params.context.{messages,set_messages,set_tools,tools}`` — how an architecture
-  reads and updates its system prompt and tool subset mid-call.
-
-This module reimplements *only* that slice with in-memory objects, so the eval can
-drive ``single`` and ``supervisor`` through their genuine code paths (real
-prompts, ``make_handler``, ``CallGuard``, nested workers) without a transport,
-audio, or a websocket. Nothing here mocks agent behaviour; it only stands in for
-the pipeline plumbing.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable

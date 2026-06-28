@@ -1,19 +1,3 @@
-"""Structured per-conversation traces — the single artifact every metric reads.
-
-One ``ConversationTrace`` is the ordered story of a single simulated call: each
-caller turn, each agent spoken turn, every tool call (name, args, result, latency)
-including the supervisor's nested worker calls, phase transitions, and the reason
-the call ended. From this one record we derive:
-
-* **accuracy** — the oracle replays the tool sequence and inspects the outcome;
-* **latency** — per-agent-turn wall times are recorded here;
-* **cost** — the attached :class:`~evaluation.harness.cost.Ledger` snapshot;
-* **debugging** — a human can read exactly what happened on a failed run.
-
-Traces are written as JSON Lines (one conversation per line) under
-``evaluation/results/`` so a whole matrix is greppable and re-analysable offline.
-"""
-
 from __future__ import annotations
 
 import json

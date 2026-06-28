@@ -1,16 +1,3 @@
-"""Aggregate finished traces into the comparison tables (CSV under evaluation/metrics/).
-
-Three CSVs come out of a run:
-
-* ``runs_*.csv`` — one row per conversation (the raw detail behind everything).
-* ``by_scenario_*.csv`` — pass/fail per (arch, model, scenario), to see *where* an
-  architecture or model breaks.
-* ``summary_*.csv`` — the headline table: per (arch, model), the accuracy
-  (oracle success rate), the mean agent-turn latency, LLM-call count, token usage,
-  and the **average cost per conversation in USD** plus the run's total spend — the
-  accuracy-vs-latency-vs-cost picture in one place.
-"""
-
 from __future__ import annotations
 
 import csv
@@ -83,10 +70,6 @@ def _summary_rows(run_rows: list[dict], traces: list[ConversationTrace]) -> list
     return summary
 
 
-def _by_scenario_rows(run_rows: list[dict]) -> list[dict]:
-    return sorted(run_rows, key=lambda r: (r["arch"], r["model"], r["scenario"]))
-
-
 def _write_csv(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -99,15 +82,11 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def write_metrics(traces: list[ConversationTrace], out_dir: Path, stamp: str | None = None) -> dict:
-    """Write the three CSVs and return the summary rows (for console printing)."""
+    """Write the two CSVs and return the summary rows (for console printing)."""
     stamp = stamp or datetime.now().strftime("%Y%m%d_%H%M%S")
     run_rows = _run_rows(traces)
     summary = _summary_rows(run_rows, traces)
-    by_scenario = _by_scenario_rows(run_rows)
 
     _write_csv(out_dir / f"runs_{stamp}.csv", run_rows)
-    _write_csv(out_dir / f"by_scenario_{stamp}.csv",
-               [{k: r[k] for k in ("arch", "model", "scenario", "passed", "end_reason", "error")}
-                for r in by_scenario])
     _write_csv(out_dir / f"summary_{stamp}.csv", summary)
     return {"stamp": stamp, "summary": summary}
