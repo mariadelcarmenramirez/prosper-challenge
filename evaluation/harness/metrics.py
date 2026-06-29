@@ -12,18 +12,39 @@ def _mean(values: list[float]) -> float:
     return round(sum(values) / len(values), 4) if values else 0.0
 
 
-def _failed_checks(oracle: dict) -> str:
-    """';'-joined names of the checks that caused this run to fail (passed==0).
+def _failing_checks(oracle: dict) -> list[dict]:
+    """The check dicts that caused this run to fail (passed==0).
 
     ``passed`` is ``all(checks ok)``, so every failing check is a cause. Passing
-    runs have no failing checks and get an empty string.
+    runs have no failing checks.
     """
-    names = [
-        c.get("name", "")
-        for c in (oracle or {}).get("checks", [])
-        if not c.get("ok")
-    ]
-    return ";".join(names)
+    return [c for c in (oracle or {}).get("checks", []) if not c.get("ok")]
+
+
+def _failed_checks(oracle: dict) -> str:
+    """';'-joined names of the checks that caused this run to fail."""
+    return ";".join(c.get("name", "") for c in _failing_checks(oracle))
+
+
+def _error(tr: ConversationTrace) -> str:
+    """Human-readable reason a run failed, for the ``error`` column.
+
+    Combines every failure source so a ``passed==0`` row is never left blank:
+    a conversation-loop exception (``tr.error``); an oracle exception
+    (``oracle['error']`` — set when the oracle itself raised, which also leaves
+    ``checks`` empty, so without this both columns would be blank); and the
+    ``detail`` of each failing check so the column says *why*, not just *which*.
+    """
+    oracle = tr.oracle or {}
+    parts: list[str] = []
+    if tr.error:
+        parts.append(tr.error)
+    if oracle.get("error"):
+        parts.append(f"oracle: {oracle['error']}")
+    for c in _failing_checks(oracle):
+        name, detail = c.get("name", ""), c.get("detail") or ""
+        parts.append(f"{name}: {detail}" if detail else name)
+    return " | ".join(p for p in parts if p)
 
 
 def _run_rows(traces: list[ConversationTrace]) -> list[dict]:
@@ -38,7 +59,7 @@ def _run_rows(traces: list[ConversationTrace]) -> list[dict]:
                 "scenario": tr.scenario_id,
                 "passed": int(bool(tr.oracle.get("passed"))),
                 "end_reason": tr.end_reason,
-                "error": tr.error or "",
+                "error": _error(tr),
                 "failed_checks": _failed_checks(tr.oracle),
                 "agent_turns": len(lat),
                 "mean_turn_latency_s": _mean(lat),
@@ -56,10 +77,15 @@ def _summary_rows(run_rows: list[dict], traces: list[ConversationTrace]) -> list
     # Gather per-(arch, model) for averages, and all turn latencies for the mean.
     by_cell_runs: dict[tuple, list[dict]] = defaultdict(list)
     by_cell_lat: dict[tuple, list[float]] = defaultdict(list)
+    by_cell_errors: dict[tuple, int] = defaultdict(int)
     for row in run_rows:
         by_cell_runs[(row["arch"], row["model"])].append(row)
     for tr in traces:
         by_cell_lat[(tr.arch, tr.model)].extend(tr.agent_turn_latencies)
+        # "errors" counts hard failures (a raised exception), not oracle checks
+        # the run merely failed — the per-run ``error`` column now carries both.
+        if tr.error or (tr.oracle or {}).get("error"):
+            by_cell_errors[(tr.arch, tr.model)] += 1
 
     summary = []
     for cell, rows in sorted(by_cell_runs.items()):
@@ -79,7 +105,7 @@ def _summary_rows(run_rows: list[dict], traces: list[ConversationTrace]) -> list
                 "avg_completion_tokens": round(_mean([float(r["completion_tokens"]) for r in rows])),
                 "avg_cost_per_call_usd": round(sum(agent_costs) / n, 6) if n else 0.0,
                 "total_cost_usd": round(sum(agent_costs), 6),
-                "errors": sum(1 for r in rows if r["error"]),
+                "errors": by_cell_errors[cell],
             }
         )
     return summary

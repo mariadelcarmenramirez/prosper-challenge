@@ -1,12 +1,3 @@
-"""Integration tests for tool_implementations against a live EHR API.
-
-The ``ehr_test_api`` fixture in ``conftest.py`` provisions an isolated EHR API
-backed by the dedicated ``ehr_test`` database and points the tool client at it
-for the whole session, so these tests never touch dev data. The only thing they
-need is Postgres up (``docker compose up -d``); if it isn't reachable the suite
-skips automatically, keeping ``uv run pytest`` green without infrastructure.
-"""
-
 import uuid
 
 from voice_agent.tools import implementations as tool_implementations

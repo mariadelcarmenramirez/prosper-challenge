@@ -1,12 +1,3 @@
-"""Unit tests for the supervisor-workers agent.
-
-These cover the parts unique to ``architectures/supervisor.py``: the supervisor's
-delegation tool surface, each worker's EHR tool subset, the FunctionSchema ->
-OpenAI tool conversion, the shared-state observation, and the worker tool-calling
-loop driven by a fake OpenAI client (no network). Loop-safety itself is reused
-from ``guard.py`` and covered by ``test_call_guard.py``.
-"""
-
 import json
 from types import SimpleNamespace
 

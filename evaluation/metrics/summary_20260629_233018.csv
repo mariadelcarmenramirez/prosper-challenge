@@ -1,0 +1,5 @@
+arch,model,conversations,success_rate,mean_turn_latency_s,avg_agent_llm_calls,avg_prompt_tokens,avg_completion_tokens,avg_cost_per_call_usd,total_cost_usd,errors
+single,gpt-4.1-mini,11,0.8182,2.1228,11.1818,27161,412,0.011524,0.126759,0
+single,gpt-5-nano,11,0.8182,3.5663,11.7273,31484,1864,0.00232,0.025518,0
+supervisor,gpt-4.1-mini,11,0.8182,4.0844,17.0909,23643,570,0.010369,0.114061,0
+supervisor,gpt-5-nano,11,0.7273,6.967,16.4545,25373,3971,0.002857,0.031428,0

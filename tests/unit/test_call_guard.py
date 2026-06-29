@@ -1,10 +1,3 @@
-"""Unit tests for the per-call loop-safety guard in guard.py.
-
-Two layers are exercised: the ``CallGuard`` state machine directly, and the
-handler wiring (``runtime.make_handler``) that attaches the stop signal to a tool
-result and ends the call programmatically when the global ceiling is hit.
-"""
-
 from types import SimpleNamespace
 
 import voice_agent.core.runtime as runtime

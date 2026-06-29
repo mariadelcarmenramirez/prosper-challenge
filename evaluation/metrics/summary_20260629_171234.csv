@@ -1,2 +1,0 @@
-arch,model,conversations,success_rate,mean_turn_latency_s,avg_agent_llm_calls,avg_prompt_tokens,avg_completion_tokens,avg_cost_per_call_usd,total_cost_usd,errors
-supervisor,gpt-4.1-mini,11,0.4545,4.0713,18.8182,26821,639,0.01175,0.129251,0

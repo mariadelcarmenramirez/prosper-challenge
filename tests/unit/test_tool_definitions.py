@@ -1,5 +1,3 @@
-"""Unit tests for the tool definitions and the handler registry."""
-
 from voice_agent.core.runtime import TOOL_HANDLERS
 from voice_agent.tools.schemas import TOOL_SCHEMAS
 

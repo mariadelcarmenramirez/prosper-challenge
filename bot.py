@@ -84,13 +84,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     if AGENT_ARCH == "supervisor":
         logger.info("Agent architecture: supervisor + worker sub-agents")
         orchestrator = supervisor.Supervisor()
-        llm = supervisor.build_llm()
+        llm = supervisor.build_llm(model="gpt-4.1-mini")
         orchestrator.register_tools(llm)
         system_prompt = orchestrator.get_initial_system_prompt()
         tools = orchestrator.get_initial_tools_schema()
     else:
         logger.info("Agent architecture: single context")
-        llm = single.build_llm()
+        llm = single.build_llm(model="gpt-4.1-mini")
         single.register_tools(llm)
         system_prompt = build_system_prompt()
         tools = single.get_tools_schema()
