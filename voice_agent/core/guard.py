@@ -17,9 +17,9 @@ with that signal (attach it to the result, end the call, or both).
 import os
 from typing import Any
 
-MAX_EMPTY_AVAILABILITY_ROUNDS = int(os.getenv("MAX_EMPTY_AVAILABILITY_ROUNDS"))
-MAX_REJECTED_OFFERS = int(os.getenv("MAX_REJECTED_OFFERS"))
-MAX_TOTAL_TOOL_CALLS = int(os.getenv("MAX_TOTAL_TOOL_CALLS"))
+MAX_EMPTY_AVAILABILITY_ROUNDS = int(os.getenv("MAX_EMPTY_AVAILABILITY_ROUNDS", "4"))
+MAX_REJECTED_OFFERS = int(os.getenv("MAX_REJECTED_OFFERS", "4"))
+MAX_TOTAL_TOOL_CALLS = int(os.getenv("MAX_TOTAL_TOOL_CALLS", "40"))
 
 
 def _stop(reason: str) -> dict[str, Any]:

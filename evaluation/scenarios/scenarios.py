@@ -71,7 +71,7 @@ async def _oracle_book_new(conn, trace, ctx) -> OracleResult:
         "validated_before_lookup",
         called_before(trace, "confirm_patient_data", "find_patient"),
     )
-    r.add("registered_new", count_tool(trace, "create_patient") >= 1, hard=False)
+    r.add("registered_new", count_tool(trace, "create_patient") >= 1)
     r.add("no_error", trace.error is None)
     return r
 
@@ -101,7 +101,7 @@ async def _oracle_book_existing(conn, trace, ctx) -> OracleResult:
     if booked:
         r.add("booked_under_existing_patient", booked[0]["patient_id"] == ctx["jane_id"])
     r.add("no_duplicate_patient", await db.patient_count(conn, JANE[0], JANE[1]) == 1)
-    r.add("did_not_register_existing", count_tool(trace, "create_patient") == 0, hard=False)
+    r.add("did_not_register_existing", count_tool(trace, "create_patient") == 0)
     r.add("no_error", trace.error is None)
     return r
 
@@ -154,7 +154,7 @@ async def _oracle_cancel_nonexistent(conn, trace, ctx) -> OracleResult:
     r.add("nothing_cancelled_or_created", len(scheduled) == 0, detail=f"scheduled={len(scheduled)}")
     # With no appointments on file, a well-behaved agent never calls cancel at all.
     r.add("no_blind_cancel", count_tool(trace, "cancel_appointment") == 0)
-    r.add("graceful_end", trace.error is None and trace.end_reason != "max_turns", hard=False)
+    r.add("graceful_end", trace.error is None and trace.end_reason != "max_turns")
     r.add("no_error", trace.error is None)
     return r
 
@@ -211,8 +211,8 @@ async def _oracle_empty_avail(conn, trace, ctx) -> OracleResult:
     r = OracleResult()
     r.add("no_booking_made", len(await db.all_scheduled(conn)) == 0)
     r.add("ended_without_error", trace.error is None and trace.end_reason != "max_turns")
-    # Soft: did the loop-guard's no_availability stop actually fire?
-    r.add("guard_no_availability_fired", trace.end_reason == "stop:no_availability", hard=False,
+    # Did the loop-guard's no_availability stop actually fire?
+    r.add("guard_no_availability_fired", trace.end_reason == "stop:no_availability",
           detail=f"end_reason={trace.end_reason}")
     return r
 
@@ -237,7 +237,7 @@ async def _oracle_reject_all(conn, trace, ctx) -> OracleResult:
     r.add("no_booking_made", len(await db.all_scheduled(conn)) == 0)
     r.add("ended_without_error", trace.error is None and trace.end_reason != "max_turns")
     r.add("guard_too_many_rejections_fired", trace.end_reason == "stop:too_many_rejections",
-          hard=False, detail=f"end_reason={trace.end_reason}")
+          detail=f"end_reason={trace.end_reason}")
     return r
 
 
@@ -349,7 +349,7 @@ async def _oracle_misheard_dob(conn, trace, ctx) -> OracleResult:
     had_valid = any(isinstance(v, dict) and v.get("valid") is True for v in validations)
     r.add("revalidated_after_correction", had_invalid and had_valid,
           detail=f"validations={len(validations)}")
-    r.add("booked", bool(await db.scheduled_at(conn, ctx["slot"])), hard=False)
+    r.add("booked", bool(await db.scheduled_at(conn, ctx["slot"])))
     r.add("no_error", trace.error is None)
     return r
 

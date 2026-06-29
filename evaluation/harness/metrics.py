@@ -12,6 +12,20 @@ def _mean(values: list[float]) -> float:
     return round(sum(values) / len(values), 4) if values else 0.0
 
 
+def _failed_checks(oracle: dict) -> str:
+    """';'-joined names of the checks that caused this run to fail (passed==0).
+
+    ``passed`` is ``all(checks ok)``, so every failing check is a cause. Passing
+    runs have no failing checks and get an empty string.
+    """
+    names = [
+        c.get("name", "")
+        for c in (oracle or {}).get("checks", [])
+        if not c.get("ok")
+    ]
+    return ";".join(names)
+
+
 def _run_rows(traces: list[ConversationTrace]) -> list[dict]:
     rows = []
     for tr in traces:
@@ -25,6 +39,7 @@ def _run_rows(traces: list[ConversationTrace]) -> list[dict]:
                 "passed": int(bool(tr.oracle.get("passed"))),
                 "end_reason": tr.end_reason,
                 "error": tr.error or "",
+                "failed_checks": _failed_checks(tr.oracle),
                 "agent_turns": len(lat),
                 "mean_turn_latency_s": _mean(lat),
                 "agent_llm_calls": led.get("agent_calls", 0),

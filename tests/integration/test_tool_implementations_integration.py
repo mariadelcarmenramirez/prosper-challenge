@@ -1,35 +1,15 @@
 """Integration tests for tool_implementations against a live EHR API.
 
-Skips automatically if the API is not reachable, so the unit suite stays green
-without infrastructure. Run the stack first:
-    docker compose up -d
-    cd ehr-api && uv run uvicorn app.main:app --port 8000
+The ``ehr_test_api`` fixture in ``conftest.py`` provisions an isolated EHR API
+backed by the dedicated ``ehr_test`` database and points the tool client at it
+for the whole session, so these tests never touch dev data. The only thing they
+need is Postgres up (``docker compose up -d``); if it isn't reachable the suite
+skips automatically, keeping ``uv run pytest`` green without infrastructure.
 """
 
-import os
 import uuid
 
-import httpx
-import pytest
-import pytest_asyncio
-
 from voice_agent.tools import implementations as tool_implementations
-
-BASE = os.environ.get("EHR_BASE_URL", "http://localhost:8000")
-
-
-async def _is_up() -> bool:
-    try:
-        async with httpx.AsyncClient(base_url=BASE, timeout=2.0) as c:
-            return (await c.get("/health")).status_code == 200
-    except httpx.HTTPError:
-        return False
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def require_api():
-    if not await _is_up():
-        pytest.skip(f"EHR API not running at {BASE}")
 
 
 async def test_find_unknown_patient_returns_none():

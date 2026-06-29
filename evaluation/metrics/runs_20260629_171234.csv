@@ -1,0 +1,12 @@
+arch,model,scenario,passed,end_reason,error,failed_checks,agent_turns,mean_turn_latency_s,agent_llm_calls,prompt_tokens,completion_tokens,agent_cost_usd,caller_cost_usd
+supervisor,gpt-4.1-mini,book_new_patient,0,patient_hangup,,validated_before_lookup;registered_new,5,4.5051,17,23250,535,0.010156,0.000976
+supervisor,gpt-4.1-mini,book_existing_patient,1,patient_hangup,,,5,3.6064,16,22208,517,0.00971,0.000946
+supervisor,gpt-4.1-mini,cancel_existing,0,patient_hangup,,listed_before_cancel,4,3.9128,15,17986,469,0.007945,0.000735
+supervisor,gpt-4.1-mini,cancel_nonexistent,0,patient_hangup,,no_blind_cancel,3,6.4616,10,11990,338,0.005337,0.000569
+supervisor,gpt-4.1-mini,same_name_diff_phone,1,patient_hangup,,,5,3.6815,16,22123,497,0.009644,0.000974
+supervisor,gpt-4.1-mini,empty_availability_loop,0,patient_hangup,,guard_no_availability_fired,8,3.7719,27,43580,981,0.019002,0.002369
+supervisor,gpt-4.1-mini,reject_offers_loop,0,patient_hangup,,guard_too_many_rejections_fired,10,4.681,37,58342,1362,0.025516,0.002609
+supervisor,gpt-4.1-mini,invalid_then_valid_time,1,patient_hangup,,,5,4.0244,16,22425,577,0.009893,0.001076
+supervisor,gpt-4.1-mini,slot_already_taken,1,patient_hangup,,,6,4.4047,21,30418,739,0.01335,0.001266
+supervisor,gpt-4.1-mini,confirm_before_cancel,1,patient_hangup,,,4,2.4411,11,13661,343,0.006013,0.000763
+supervisor,gpt-4.1-mini,misheard_dob,0,patient_hangup,,revalidated_after_correction,6,3.5082,21,29045,667,0.012685,0.001322

@@ -9,7 +9,6 @@ from evaluation.harness.trace import ConversationTrace
 class Check:
     name: str
     ok: bool
-    hard: bool = True
     detail: str = ""
 
 
@@ -17,18 +16,18 @@ class Check:
 class OracleResult:
     checks: list[Check] = field(default_factory=list)
 
-    def add(self, name: str, ok: bool, hard: bool = True, detail: str = "") -> None:
-        self.checks.append(Check(name=name, ok=ok, hard=hard, detail=detail))
+    def add(self, name: str, ok: bool, detail: str = "") -> None:
+        self.checks.append(Check(name=name, ok=ok, detail=detail))
 
     @property
     def passed(self) -> bool:
-        return all(c.ok for c in self.checks if c.hard)
+        return all(c.ok for c in self.checks)
 
     def to_dict(self) -> dict:
         return {
             "passed": self.passed,
             "checks": [
-                {"name": c.name, "ok": c.ok, "hard": c.hard, "detail": c.detail}
+                {"name": c.name, "ok": c.ok, "detail": c.detail}
                 for c in self.checks
             ],
         }

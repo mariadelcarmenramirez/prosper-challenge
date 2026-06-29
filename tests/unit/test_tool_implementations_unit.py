@@ -1,5 +1,7 @@
 """Unit tests for tool_implementations — httpx mocked with respx (no EHR API needed)."""
 
+import json
+
 import httpx
 import respx
 
@@ -9,6 +11,9 @@ BASE = tool_implementations.EHR_BASE_URL
 
 
 async def test_confirm_patient_data_returns_validation_result():
+    """The client forwards the caller's raw inputs and returns the server's verdict
+    verbatim. Normalization is the server's job (covered in the EHR suite), so here
+    we assert faithful pass-through — not the phone value we mocked ourselves."""
     payload = {
         "valid": True,
         "full_name": "Jane Doe",
@@ -17,13 +22,20 @@ async def test_confirm_patient_data_returns_validation_result():
         "issues": [],
     }
     with respx.mock(base_url=BASE) as mock:
-        mock.post("/patients/validate").mock(return_value=httpx.Response(200, json=payload))
+        route = mock.post("/patients/validate").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
         result = await tool_implementations.confirm_patient_data(
             "  Jane Doe ", "1990-01-01", "+34 600 000 000"
         )
-    assert result["valid"] is True
-    assert result["phone"] == "+34600000000"
-    assert result["issues"] == []
+    # The raw, un-normalized inputs are sent for the server to validate.
+    assert json.loads(route.calls.last.request.content) == {
+        "full_name": "  Jane Doe ",
+        "date_of_birth": "1990-01-01",
+        "phone": "+34 600 000 000",
+    }
+    # The server's verdict is returned to the agent unchanged.
+    assert result == payload
 
 
 async def test_find_patient_returns_none_on_404():
