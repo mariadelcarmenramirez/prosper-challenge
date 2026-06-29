@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,8 +21,9 @@ from ..core.guard import MAX_TOTAL_TOOL_CALLS, CallGuard, with_stop
 from ..core.prompts import always_on_rules
 from ..core.runtime import ACK_PHRASES, TOOL_HANDLERS, build_llm, end_call
 
-# Aliased to avoid colliding with the supervisor's own ``cancel_appointment``
-# delegation tool defined below: this is the EHR tool the workers actually call.
+# The real EHR cancellation endpoint the workers call, kept under a distinct local
+# name. No delegation tool may share a name with a backend EHR tool, so the cancel
+# delegation is ``cancel_booking`` while this EHR endpoint stays ``cancel_appointment``.
 from ..tools.schemas import cancel_appointment as _ehr_cancel_appointment
 from ..tools.schemas import (
     confirm_appointment,
@@ -78,8 +80,8 @@ book_appointment = FunctionSchema(
     required=["request"],
 )
 
-cancel_appointment = FunctionSchema(
-    name="cancel_appointment",
+cancel_booking = FunctionSchema(
+    name="cancel_booking",
     description=(
         "Delegate to the cancellation worker. Pass a plain-words note: either 'list "
         "the caller's upcoming appointments', or which appointment the caller has "
@@ -99,7 +101,7 @@ cancel_appointment = FunctionSchema(
     required=["request"],
 )
 
-SUPERVISOR_TOOLS: list[FunctionSchema] = [identify_caller, book_appointment, cancel_appointment]
+SUPERVISOR_TOOLS: list[FunctionSchema] = [identify_caller, book_appointment, cancel_booking]
 
 
 # --- Shared per-call state --------------------------------------------------
@@ -296,15 +298,23 @@ async def _execute_tool(
     guard: CallGuard,
     state: SessionState,
     handlers: dict[str, Callable[..., Awaitable[Any]]],
+    recorder: Callable[..., None] | None = None,
 ) -> Any:
     """Run one EHR tool for a worker, with the same loop-safety as the single agent."""
     signal = guard.record_call()
     if signal is not None:
         return signal  # global ceiling: hand the worker the stop signal
+    t0 = time.perf_counter()
     result = await handlers[name](**arguments)
+    latency = time.perf_counter() - t0
     if result is None:  # find_patient signals "unknown" with None
         result = {"found": False}
     _update_state(state, name, result)
+    # Surface this nested worker tool call to an observer (the eval trace) exactly
+    # like a top-level call, so a multi-agent run produces a faithful, complete tool
+    # log — the granular EHR calls happen here, one level below the delegation tools.
+    if recorder is not None:
+        recorder("tool_call", name=name, args=arguments, result=result, latency=round(latency, 4))
     streak = guard.update(name, result)
     if streak is not None:
         result = with_stop(result, streak)
@@ -320,6 +330,7 @@ async def _run_agent_loop(
     guard: CallGuard,
     state: SessionState,
     handlers: dict[str, Callable[..., Awaitable[Any]]] | None = None,
+    recorder: Callable[..., None] | None = None,
     model: str = WORKER_MODEL,
     max_steps: int = WORKER_MAX_STEPS,
 ) -> str:
@@ -349,6 +360,7 @@ async def _run_agent_loop(
                 guard,
                 state,
                 handlers,
+                recorder,
             )
             messages.append(
                 {"role": "tool", "tool_call_id": tool_call.id, "content": json.dumps(result)}
@@ -367,7 +379,7 @@ in your own warm words:
 - identify_caller(full_name, date_of_birth, phone): validates and finds-or-registers the caller.
 - book_appointment(request): hands the booking specialist a plain-words note about the caller's \
 availability, or their confirmation/rejection of an offer.
-- cancel_appointment(request): hands the cancellation specialist a plain-words note about which \
+- cancel_booking(request): hands the cancellation specialist a plain-words note about which \
 appointment to cancel, or 'list the caller's upcoming appointments'.
 You never track a patient id yourself — the workers already know who the caller is once identified.
 
@@ -392,10 +404,10 @@ their new times if they gave any.
   - On no availability: ask for other times and call book_appointment again.
 
 CANCEL
-- Call cancel_appointment(request="List the caller's upcoming appointments.").
+- Call cancel_booking(request="List the caller's upcoming appointments.").
 - Relay what it reports: if none, say so; if one, "You have one on {date} at {time}. Cancel that?"; \
 if several, list them and ask which one they mean.
-- After an explicit yes, call cancel_appointment(request="The caller confirmed cancelling the \
+- After an explicit yes, call cancel_booking(request="The caller confirmed cancelling the \
 {date} at {time} appointment.") and confirm it's cancelled.
 """
 
@@ -416,10 +428,13 @@ class Supervisor:
         self.handlers = TOOL_HANDLERS
         self._now = now
         self._client_obj = None  # lazy: only built when a worker actually runs
+        # Optional hook: an observer (the eval harness) sets this to mirror nested
+        # worker tool calls into its trace. Stays None in production.
+        self.recorder: Callable[..., None] | None = None
         self._workers: dict[str, Worker] = {
             "identify_caller": IDENTIFIER_WORKER,
             "book_appointment": BOOKER_WORKER,
-            "cancel_appointment": CANCELLER_WORKER,
+            "cancel_booking": CANCELLER_WORKER,
         }
 
     # -- public surface ------------------------------------------------------
@@ -463,6 +478,7 @@ class Supervisor:
                 guard=self.guard,
                 state=self.state,
                 handlers=self.handlers,
+                recorder=self.recorder,
             )
             # Global circuit breaker: a worker pushed us over the ceiling — hand the
             # supervisor the report plus a stop signal and end the call, just like

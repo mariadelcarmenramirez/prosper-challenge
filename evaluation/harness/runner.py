@@ -51,6 +51,12 @@ class ConversationRunner:
         self.trace = trace
         self.max_turns = max_turns
         self._stop = False
+        # In multi-agent architectures the real EHR tool calls happen one level below
+        # the supervisor's delegation tools, inside worker sub-agents. Point the
+        # orchestrator's recorder at our trace so those nested calls are logged just
+        # like top-level ones, giving the oracle a faithful, complete tool log.
+        if setup.orchestrator is not None:
+            setup.orchestrator.recorder = self.trace.add
 
     async def run(self) -> ConversationTrace:
         self.trace.start()

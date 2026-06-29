@@ -34,12 +34,13 @@ def _schema_names(schemas):
 
 def test_supervisor_only_has_the_three_delegation_tools():
     names = {t.name for t in sup.SUPERVISOR_TOOLS}
-    assert names == {"identify_caller", "book_appointment", "cancel_appointment"}
-    # The supervisor must NOT be handed any raw EHR tools. ("cancel_appointment" is
-    # excluded: the supervisor's cancel *delegation* tool deliberately shares that
-    # name, but it is a different schema from the EHR tool the workers call.)
-    ehr_only = (IDENTIFIER_TOOLS | BOOKER_TOOLS | CANCELLER_TOOLS) - {"cancel_appointment"}
-    assert not (names & ehr_only)
+    assert names == {"identify_caller", "book_appointment", "cancel_booking"}
+    # No delegation tool may share a name with a real EHR/backend tool, so the eval
+    # trace can always tell an orchestration call apart from an actual API mutation
+    # (the cancel *delegation* is ``cancel_booking``; the EHR tool stays
+    # ``cancel_appointment``).
+    ehr_tools = IDENTIFIER_TOOLS | BOOKER_TOOLS | CANCELLER_TOOLS
+    assert not (names & ehr_tools)
 
 
 def test_each_worker_owns_its_ehr_subset():
@@ -150,6 +151,47 @@ async def test_worker_loop_runs_a_tool_then_reports():
     second_call_messages = client.calls[1]["messages"]
     assert second_call_messages[-1]["role"] == "tool"
     assert json.loads(second_call_messages[-1]["content"])["id"] == "pat-7"
+
+
+async def test_worker_loop_records_nested_tool_calls():
+    """A recorder hook captures each nested worker tool call, shaped like a top-level
+    trace event, so a multi-agent run yields a faithful, complete tool log."""
+
+    async def fake_confirm(**kwargs):
+        return {"valid": True}
+
+    async def fake_find(**kwargs):
+        return {"id": "pat-7", "full_name": "Jane Doe"}
+
+    client = _FakeOpenAI(
+        [
+            _msg(tool_calls=[_tool_call("c1", "confirm_patient_data", {"full_name": "Jane Doe"})]),
+            _msg(tool_calls=[_tool_call("c2", "find_patient", {"full_name": "Jane Doe"})]),
+            _msg(content="The caller is identified: Jane Doe."),
+        ]
+    )
+    recorded: list[tuple] = []
+
+    def recorder(event_type, **data):
+        recorded.append((event_type, data))
+
+    await sup._run_agent_loop(
+        system_prompt="ignored",
+        tools=[],
+        task="identify",
+        client=client,
+        guard=CallGuard(),
+        state=sup.SessionState(),
+        handlers={"confirm_patient_data": fake_confirm, "find_patient": fake_find},
+        recorder=recorder,
+    )
+
+    # Both nested EHR calls recorded, in order, with the same shape _dispatch emits.
+    assert all(t == "tool_call" for t, _ in recorded)
+    assert [d["name"] for _, d in recorded] == ["confirm_patient_data", "find_patient"]
+    assert recorded[0][1]["args"] == {"full_name": "Jane Doe"}
+    assert recorded[0][1]["result"] == {"valid": True}
+    assert "latency" in recorded[1][1]
 
 
 async def test_worker_loop_stops_at_max_steps_without_a_final_message():

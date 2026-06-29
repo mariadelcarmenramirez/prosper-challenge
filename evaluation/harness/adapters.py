@@ -23,6 +23,9 @@ class AgentSetup:
     llm: FakeLLM
     context: FakeLLMContext
     guard: CallGuard
+    # Set for multi-agent architectures whose real tool calls happen inside nested
+    # workers; the runner points its ``recorder`` at the trace so those calls log.
+    orchestrator: Any = None
 
 
 def _build_single(model: str, now: datetime | None) -> AgentSetup:
@@ -60,7 +63,7 @@ def _build_supervisor(model: str, now: datetime | None, agent_client: Any) -> Ag
         messages=[{"role": "system", "content": orchestrator.get_initial_system_prompt()}],
         tools=orchestrator.get_initial_tools_schema(),
     )
-    return AgentSetup("supervisor", model, llm, context, guard)
+    return AgentSetup("supervisor", model, llm, context, guard, orchestrator=orchestrator)
 
 
 def build_agent(arch: str, model: str, now: datetime | None, agent_client: Any) -> AgentSetup:
