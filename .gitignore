@@ -13,7 +13,6 @@ __pycache__/
 dist/
 build/
 .eggs/
-.python-version
 
 # Virtual environments
 .venv/

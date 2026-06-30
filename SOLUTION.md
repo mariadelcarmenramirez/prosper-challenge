@@ -76,15 +76,7 @@ Two standard agent architectures were tested to find the best fit for this use c
 * **Single agent** — one agent holds the full context and has every tool at once; it decides which tool to call at each step.
 * **Supervisor + workers** — the supervisor is the only one that talks to the caller (wired to `bot.py`). It has no EHR tools of its own; it delegates to three specialist workers, each with its own small tool subset.
 
-| Architecture | Agent | Tools |
-|---|---|---|
-| **Single** | Single agent | all 8: `confirm_patient_data`, `find_patient`, `create_patient`, `list_availability_slots`, `list_patient_appointments`, `create_appointment`, `confirm_appointment`, `cancel_appointment` |
-| **Supervisor** | Supervisor (talks to caller) | `identify_caller`, `book_appointment`, `cancel_booking` (delegation only) |
-| | Identification worker | `confirm_patient_data`, `find_patient`, `create_patient` |
-| | Booking worker | `list_availability_slots`, `create_appointment`, `confirm_appointment`, `cancel_appointment` |
-| | Cancellation worker | `list_patient_appointments`, `cancel_appointment` |
-
-
+![schema](img/architectures.png)
 
 ## Latency & Evaluation
 
@@ -115,6 +107,11 @@ code refuses to start against any database whose name doesn't end in `_test`
 (override with `TEST_DATABASE_URL` / `EVAL_DATABASE_URL`). The test and eval APIs
 also run on their own ports (`:8011`, `:8012`), so a live dev API on `:8000` is
 never touched.
+
+
+## Continuous integration
+
+`.github/workflows/tests.yml` runs the full suite on every pull request targeting `main`. 
 
 
 ## How to use
@@ -175,7 +172,9 @@ uv run uvicorn app.main:app --port 8000
 uv run bot.py
 ```
 
-**6. Voice-agent tests** (unit tests are standalone; integration tests need Postgres)
+Open http://localhost:7860 in your browser and click Connect to start talking to the bot.
+
+**6. Voice-agent tests**
 
 ```
 uv run pytest tests/unit/
@@ -185,8 +184,7 @@ uv run pytest tests/integration/
 **7. EHR-API tests**
 
 ```
-cd ehr-api
-uv run pytest tests/integration/
+uv run pytest ehr-api/tests/integration/
 ```
 
 **8. Evaluating the agent**
@@ -195,11 +193,12 @@ uv run pytest tests/integration/
 uv run python -m evaluation.run_eval
 ``` 
 
+
 ## Future improvements
 
-**Reliability — multiple providers with fallback.** The goal is to keep the agent
+**Reliability — multiple providers with fallback.** In order to keep the agent
 answering even when an external dependency fails — most importantly when the AI
-provider is down or rate-limiting. Today there is a single provider per service
+provider is down or rate-limiting, several providers must be considered. Now there is a single provider per service
 (OpenAI for the LLM, ElevenLabs for STT/TTS), so any one of them going down takes
 the whole call down with it. The natural next step is to wire in a second provider
 for each — for the LLM, Azure OpenAI or Anthropic (Claude); for speech, an
@@ -207,25 +206,17 @@ alternative STT/TTS vendor.
 
 **Production observability with OpenTelemetry.** Right now traces are extracted
 manually in the evaluation harness (`evaluation/harness/trace.py` writes per-call
-JSONL), which is great for offline runs but gives no visibility into live calls.
-Instrumenting the pipeline with OpenTelemetry (Pipecat ships built-in support)
-would emit spans for each turn, tool call, and LLM/STT/TTS request to a standard
+JSONL), which is useful for offline runs but gives no visibility into live calls.
+Instrumenting the pipeline with OpenTelemetry would emit spans for each turn, tool call, and LLM/STT/TTS request to a standard
 backend, so latency, errors, and cost can be monitored in production instead of
 only reconstructed after the fact.
 
-**An ORM for the database layer.** The EHR API currently talks to Postgres through
-raw `asyncpg` queries and a single hand-applied SQL migration. Moving to an ORM
-such as SQLAlchemy (with Alembic for versioned migrations) would make the data
+**An ORM for the database layer.** Useing an ORM
+such as SQLAlchemy would make the data
 layer easier to evolve.
 
-**Cloud deployment.** The EHR API is already containerised and the bot is
-Pipecat-Cloud-ready; the remaining work is to deploy both (managed Postgres,
-secrets, and a public transport) so the agent runs on real phone calls rather than
+**Cloud deployment.** Setting up managed Postgres, secrets, and a public transport so the agent runs on real phone calls rather than
 locally.
-
-**CI integration.** The project already has a solid test suite (unit + integration
-for the agent and the EHR API). Wiring this into CI so every
-push runs the full test suite.
 
 
 ## Reference
