@@ -1,0 +1,86 @@
+"""Pydantic request/response models for the EHR API.
+
+The request/response shape is designed to read like a real integration: patients
+and appointments are identified by UUID, datetimes are timezone-aware ISO-8601.
+"""
+
+from datetime import date, datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
+
+# --- Patients ---------------------------------------------------------------
+
+
+class CreatePatientRequest(BaseModel):
+    # A patient is fully identified by name + date of birth + phone; all three
+    # are required so the same person can always be found again.
+    full_name: str
+    date_of_birth: date
+    phone: str
+
+
+class PatientResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    full_name: str
+    date_of_birth: date
+    phone: str
+
+
+class ConfirmPatientDataRequest(BaseModel):
+    """Raw, caller-provided identity to validate *before* find/create. Taken as
+    plain strings (not ``date``) so a malformed value yields a friendly issue
+    instead of FastAPI rejecting the whole request with a 422."""
+
+    full_name: str
+    date_of_birth: str
+    phone: str
+
+
+class ConfirmPatientDataResponse(BaseModel):
+    """Result of the pre-lookup identity check. When ``valid`` is true the
+    normalized fields are the canonical values to pass on to find/create_patient;
+    when false, ``issues`` lists, in plain language, what to re-ask the caller."""
+
+    valid: bool
+    full_name: str | None = None
+    date_of_birth: str | None = None
+    phone: str | None = None
+    issues: list[str] = []
+
+
+# --- Appointments -----------------------------------------------------------
+
+
+class CreateAppointmentRequest(BaseModel):
+    """Book a slot for a patient. ``starts_at`` is interpreted as clinic-local
+    (Europe/Madrid) time when no timezone offset is supplied."""
+
+    patient_id: UUID
+    starts_at: datetime
+
+
+class AppointmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    patient_id: UUID
+    starts_at: datetime
+    ends_at: datetime
+    status: str
+    held_until: datetime | None = None
+
+
+class SlotResponse(BaseModel):
+    """A free, bookable slot. Only available slots are ever returned, so there
+    is no ``is_booked`` field to keep in sync."""
+
+    starts_at: datetime
+    ends_at: datetime
+
+
+class CancelAppointmentResponse(BaseModel):
+    id: UUID
+    status: str

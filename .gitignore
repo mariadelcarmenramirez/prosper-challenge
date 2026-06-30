@@ -36,3 +36,6 @@ htmlcov/
 # Misc
 *.log
 .cache/
+
+# extra
+extra/

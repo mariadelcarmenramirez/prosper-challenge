@@ -1,0 +1,61 @@
+name: tests
+
+# Runs the full suite on every PR targeting main (so the ehr-voice-agent -> main
+# PR is gated) and on pushes to main after merge.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      # Never re-resolve in CI: install strictly from uv.lock. This also makes the
+      # subprocess `uv run uvicorn` the integration suite spawns frozen + offline.
+      UV_FROZEN: "1"
+      # Matches docker-compose.yml; the suites auto-create the `ehr_test` database.
+      TEST_DATABASE_URL: postgresql://ehr:ehr@localhost:5432/ehr_test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ehr
+          POSTGRES_USER: ehr
+          POSTGRES_PASSWORD: ehr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ehr -d ehr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      # voice_agent suites (tests/unit + tests/integration). The integration suite
+      # spins up its own ehr_test-backed EHR API subprocess against the service above.
+      - name: voice_agent tests (tests/unit + tests/integration)
+        run: uv run pytest tests/unit tests/integration
+
+      # ehr-api integration suite (ehr-api/tests/integration/*.py), run from the
+      # package dir so its pythonpath ("." -> app, tests) resolves.
+      - name: ehr-api integration tests
+        working-directory: ehr-api
+        run: uv run pytest tests/integration

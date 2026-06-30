@@ -21,6 +21,11 @@ Run the bot using::
 import os
 
 from dotenv import load_dotenv
+
+# Load .env before importing modules whose constants read os.getenv() at import time
+# (e.g. voice_agent.core.guard).
+load_dotenv(override=True)
+
 from loguru import logger
 
 print("🚀 Starting Pipecat bot...")
@@ -52,16 +57,18 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
-from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy import (
     TurnAnalyzerUserTurnStopStrategy,
 )
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
+from voice_agent.architectures import single, supervisor
+from voice_agent.core.prompts import build_system_prompt
+
 logger.info("✅ All components loaded successfully!")
 
-load_dotenv(override=True)
+AGENT_ARCH = os.environ.get("AGENT_ARCH", "single")
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
@@ -74,16 +81,28 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         voice_id="SAz9YHcvj6GT2YYXdXww",
     )
 
-    llm = OpenAILLMService(api_key=os.environ["OPENAI_API_KEY"])
+    if AGENT_ARCH == "supervisor":
+        logger.info("Agent architecture: supervisor + worker sub-agents")
+        orchestrator = supervisor.Supervisor()
+        llm = supervisor.build_llm(model="gpt-4.1-mini")
+        orchestrator.register_tools(llm)
+        system_prompt = orchestrator.get_initial_system_prompt()
+        tools = orchestrator.get_initial_tools_schema()
+    else:
+        logger.info("Agent architecture: single context")
+        llm = single.build_llm(model="gpt-4.1-mini")
+        single.register_tools(llm)
+        system_prompt = build_system_prompt()
+        tools = single.get_tools_schema()
 
     messages = [
         {
             "role": "system",
-            "content": "You are a friendly AI assistant. Respond naturally and keep your answers conversational.",
+            "content": system_prompt,
         },
     ]
 
-    context = LLMContext(messages)
+    context = LLMContext(messages, tools=tools)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
@@ -124,7 +143,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         messages.append(
             {
                 "role": "system",
-                "content": "Say hello and briefly introduce yourself as a digital assistant from the Prosper Health clinic.",
+                "content": (
+                    "Greet the caller, introduce yourself as the Prosper Health scheduling "
+                    "assistant, and ask for their full name, date of birth and phone number "
+                    "so you can find them in the system."
+                ),
             }
         )
         await task.queue_frames([LLMRunFrame()])
