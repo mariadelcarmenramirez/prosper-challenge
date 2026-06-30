@@ -171,7 +171,7 @@ def main() -> None:
     parser.add_argument("--model", help="Limit to one agent model.")
     parser.add_argument("--scenario", help="Limit to one scenario id.")
     parser.add_argument("--caller-model", default="gpt-4.1",
-                        help="Fixed model that plays the simulated caller (default: gpt-4.1-mini).")
+                        help="Fixed model that plays the simulated caller (default: gpt-4.1).")
     parser.add_argument("--no-launch", action="store_true",
                         help="Reuse an EHR API already running at EHR_BASE_URL instead of launching one.")
     args = parser.parse_args()
