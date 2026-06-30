@@ -66,7 +66,7 @@ The agent knows today's date (Europe/Madrid), so it can turn words like "tomorro
 
 **Tool design.** Each EHR operation is one `FunctionSchema` written directly for the Pipecat function-calling format, instead of pulling in a heavier agent framework (LangChain, LangGraph, etc.), to ensure compatibility with Pipecat. 
 
-**Loop verifier.** `CallGuard` counts per-call events and returns a `stop` signal when the caller rejects too many offers in a row (set in `.env` with `MAX_EMPTY_AVAILABILITY_ROUNDS`), when there are too many rounds with no availability (set in `.env` with `MAX_REJECTED_OFFERS`), or when a global tool-call ceiling is reached (set in `.env` with `MAX_TOTAL_TOOL_CALLS`). On `stop`, the agent gives one short apology and ends the call, so it can never loop forever.
+**Loop verifier.** `CallGuard` counts per-call events and returns a `stop` signal when the caller rejects too many offers in a row (set in `.env` with `MAX_REJECTED_OFFERS`), when there are too many rounds with no availability (set in `.env` with `MAX_EMPTY_AVAILABILITY_ROUNDS`), or when a global tool-call ceiling is reached (set in `.env` with `MAX_TOTAL_TOOL_CALLS`). On `stop`, the agent gives one short apology and ends the call, so it can never loop forever.
 
 
 ### Single-agent vs supervisor
